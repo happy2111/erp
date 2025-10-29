@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                   String                 @id @default(uuid())
+  name                 String
+  db_name              String
+  api_key              String                 @unique
+  ownerId              String                 @unique
+  owner                User                   @relation(fields: [ownerId], references: [id])
+  createdAt            DateTime               @default(now())
+  auditTenantCreations AuditTenantCreations[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  email     String   @unique
+  password  String
+  role      UserRole @default(OWNER)
+  createdAt DateTime @default(now())
+  tenants   Tenant[]
+}
+
+model AuditTenantCreations {
+  id        String   @id @default(uuid())
+  tenantId  String
+  createdBy String
+  action    String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  metadata  Json?
+}
+
+// enum for user roles
+enum UserRole {
+  PLATFORM_OWNER
+  ADMIN
+  OWNER
+}
