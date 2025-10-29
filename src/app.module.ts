@@ -5,13 +5,18 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { TenantUserModule } from './tenant-user/tenant-user.module';
+import { PrismaTenantModule } from './prisma_tenant/prisma_tenant.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({isGlobal: true}),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
     PrismaModule,
     TenantsModule,
-    TenantUserModule
+    TenantUserModule,
+    PrismaTenantModule
   ],
   controllers: [AppController],
   providers: [AppService],

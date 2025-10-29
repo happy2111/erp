@@ -6,14 +6,18 @@ import {CreateTenantUserDto} from "./dto/create-tenant-user.dto";
 export class TenantUserController {
   constructor(private readonly tenantUserService: TenantUserService) {}
 
-  @Post("")
+  @Post("create")
   async create(@Body() dto: CreateTenantUserDto) {
     return this.tenantUserService.createUser(dto);
   }
 
-  @Get("")
+  @Get("all")
   async findAll() {
     return this.tenantUserService.findAll();
   }
 
+  @Get(":id")
+  async findOne(@Body() id: string) {
+    return this.tenantUserService.findOne(id);
+  }
 }

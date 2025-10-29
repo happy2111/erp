@@ -1,5 +1,12 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Tenant } from '@prisma/client';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
@@ -7,13 +14,27 @@ export class ApiKeyGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
-    const apiKey = req.headers['x-tenant-key'] || req.headers['api-key'] || req.headers['authorization']?.replace('Bearer ', '');
-    if (!apiKey) throw new UnauthorizedException('Tenant API key missing');
+    const apiKey = req.headers['x-tenant-key']
+      || req.headers['api-key']
+      || req.headers['authorization']?.replace('Bearer ', '');
 
-    const tenant = await this.prisma.tenant.findUnique({ where: { api_key: apiKey } });
-    if (!tenant) throw new UnauthorizedException('Invalid tenant API key');
+    if (!apiKey) {
+      throw new UnauthorizedException('Tenant API key missing');
+    }
 
-    // сохраняем tenant в req для дальнейшего использования
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { apiKey }
+    });
+
+    if (!tenant) {
+      throw new UnauthorizedException('Invalid tenant API key');
+    }
+
+    if (tenant.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Tenant is not active');
+    }
+
+    // Сохраняем tenant в request для дальнейшего использования
     req.tenant = tenant;
     return true;
   }

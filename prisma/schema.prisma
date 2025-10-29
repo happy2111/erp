@@ -9,32 +9,41 @@ datasource db {
 
 model Tenant {
   id                   String                 @id @default(uuid())
-  name                 String
-  db_name              String
-  api_key              String                 @unique
-  ownerId              String                 @unique
+  name                 String                 @unique
+  ownerId              String                 @map("owner_id")
+  apiKey               String                 @unique @map("api_key")
+  dbName               String                 @map("db_name")
+  dbHost               String                 @map("db_host")
+  dbPort               Int                    @map("db_port")
+  dbUser               String                 @map("db_user")
+  dbPassword           String                 @map("db_password")
+  status               TenantStatus           @default(ACTIVE)
   owner                User                   @relation(fields: [ownerId], references: [id])
-  createdAt            DateTime               @default(now())
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
   auditTenantCreations AuditTenantCreations[]
 }
 
 model User {
   id        String   @id @default(uuid())
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
   phone     String   @unique
-  email     String   @unique
+  email     String?  @unique
   password  String
   role      UserRole @default(OWNER)
-  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
   tenants   Tenant[]
 }
 
 model AuditTenantCreations {
   id        String   @id @default(uuid())
-  tenantId  String
-  createdBy String
+  tenantId  String   @map("tenant_id")
+  createdBy String   @map("created_by")
   action    String
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
   metadata  Json?
 }
 
@@ -43,4 +52,11 @@ enum UserRole {
   PLATFORM_OWNER
   ADMIN
   OWNER
+}
+
+enum TenantStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
 }
