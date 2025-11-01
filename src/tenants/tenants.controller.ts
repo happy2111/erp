@@ -52,6 +52,11 @@ export class TenantsController {
     return this.tenantsService.hardDeleteTenant(id, userId);
   }
 
+  @Post('migrate-all')
+  async migrateAllTenants() {
+    return this.tenantsService.updateAllTenantDatabases();
+  }
+
   // === Работа с данными тенанта через API Key ===
 
   // @Post('products')

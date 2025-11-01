@@ -1,0 +1,480 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../node_modules/.prisma/client-tenant"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TENANT_DATABASE_URL")
+}
+
+model Currency {
+  id        String   @id @default(uuid())
+  code      String   @unique // ISO код: UZS, USD, EUR
+  name      String // Полное название валюты
+  symbol    String // Символ: $, €, so’m
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  product_prices ProductPrice[]
+  kassas         Kassa[]
+  payments       Payment[]
+  transactions   Transaction[]
+  sales          Sale[]
+  sale_items     SaleItem[]
+  Purchase       Purchase[]
+
+  @@map("currencies")
+}
+
+model Organization {
+  id      String  @id @default(uuid())
+  name    String
+  address String?
+  phone   String? @unique
+  email   String? @unique
+
+  org_users OrganizationUser[]
+  customers OrganizationCustomer[]
+
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  products          Product[]
+  product_prices    ProductPrice[]
+  product_instances ProductInstance[] @relation("OrgProductInstances")
+  kassas            Kassa[]
+  payments          Payment[]
+  transactions      Transaction[]
+  sales             Sale[]
+  Purchase          Purchase[]
+
+  @@map("organizations")
+}
+
+model User {
+  id            String                 @id @default(uuid())
+  phone_numbers UserPhone[]
+  email         String?                @unique
+  password      String
+  isActive      Boolean                @default(true) @map("is_active")
+  profile       UserProfile?
+  org_links     OrganizationUser[]
+  cutomer_links OrganizationCustomer[]
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+  payments      Payment[]
+  sales         Sale[]
+  Purchase      Purchase[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id             String    @id @default(uuid())
+  userId         String    @unique @map("user_id")
+  firstName      String    @map("first_name")
+  lastName       String    @map("last_name")
+  patronymic     String?
+  dateOfBirth    DateTime? @map("date_of_birth")
+  gender         Gender    @default(OTHER)
+  passportSeries String?   @map("passport_series")
+  passportNumber String?   @map("passport_number")
+  issuedBy       String?   @map("issued_by")
+  issuedDate     DateTime? @map("issued_date")
+  expiryDate     DateTime? @map("expiry_date")
+  country        String?
+  region         String?
+  city           String?
+  address        String?
+  registration   String?
+  user           User      @relation(fields: [userId], references: [id])
+
+  @@map("user_profiles")
+}
+
+model UserPhone {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  phone     String   @unique
+  note      String?
+  isPrimary Boolean  @default(false) @map("is_primary")
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_phones")
+}
+
+model OrganizationUser {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  userId         String       @map("user_id")
+  role           OrgUserRole
+  position       String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("organization_users")
+}
+
+model OrganizationCustomer {
+  id                String            @id @default(uuid())
+  organizationId    String            @map("organization_id")
+  userId            String?           @map("user_id")
+  name              String
+  phone             String
+  type              CustomerType
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  user              User?             @relation(fields: [userId], references: [id])
+  product_instances ProductInstance[] @relation("CustomerProductInstances")
+  payments          Payment[]
+  transactions      Transaction[]
+  sales             Sale[]
+  Purchase          Purchase[]
+
+  @@map("organization_customers")
+}
+
+model Brand {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("brands")
+}
+
+model Product {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  name           String
+  description    String?
+  expiry_date    DateTime? @map("expiry_date")
+  serial_number  String?   @unique @map("serial_number")
+  barcode        String?   @unique
+
+  brandId String? @map("brand_id")
+
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  brand        Brand?            @relation(fields: [brandId], references: [id])
+  categories   ProductCategory[]
+  prices       ProductPrice[]
+  instances    ProductInstance[]
+
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  sele_items     SaleItem[]
+  purchase_items PurchaseItem[]
+
+  @@map("products")
+}
+
+model Category {
+  id       String            @id @default(uuid())
+  name     String            @unique
+  products ProductCategory[] // связь через промежуточную таблицу
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("categories")
+}
+
+model ProductCategory {
+  productId  String
+  categoryId String
+
+  product  Product  @relation(fields: [productId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([productId, categoryId]) // составной первичный ключ
+  @@map("product_categories")
+}
+
+model ProductPrice {
+  id             String        @id @default(uuid())
+  productId      String        @map("product_id")
+  organizationId String?       @map("organization_id")
+  priceType      PriceType     @map("price_type")
+  amount         Decimal       @map("amount")
+  currencyId     String        @map("currency_id")
+  currency       Currency      @relation(fields: [currencyId], references: [id])
+  product        Product       @relation(fields: [productId], references: [id])
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  customerType   CustomerType? // CLIENT, SUPPLIER и т.д.
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+}
+
+model ProductInstance {
+  id             String        @id @default(uuid())
+  productId      String        @map("product_id")
+  serialNumber   String        @unique @map("serial_number")
+  currentOwnerId String?       @map("current_owner_id")
+  currentStatus  ProductStatus @default(IN_STOCK)
+  organizationId String        @map("organization_id")
+
+  product       Product               @relation(fields: [productId], references: [id])
+  organization  Organization          @relation("OrgProductInstances", fields: [organizationId], references: [id])
+  current_owner OrganizationCustomer? @relation("CustomerProductInstances", fields: [currentOwnerId], references: [id])
+  transactions  ProductTransaction[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("product_instances")
+}
+
+model ProductTransaction {
+  id                String        @id @default(uuid())
+  productInstanceId String        @map("product_instance_id")
+  fromCustomerId    String?       @map("from_customer_id")
+  toCustomerId      String?       @map("to_customer_id")
+  saleId            String?       @map("sale_id") // связь с продажей, если нужно
+  action            ProductAction
+  date              DateTime      @default(now())
+  description       String?
+
+  product_instance ProductInstance @relation(fields: [productInstanceId], references: [id])
+
+  @@map("product_transactions")
+}
+
+model Kassa {
+  id             String  @id @default(uuid())
+  organizationId String  @map("organization_id")
+  name           String // например: "Наличные UZS", "Click", "USD касса"
+  type           String // пользователь сам укажет тип (нал, банк, электронная)
+  currencyId     String  @map("currency_id")
+  balance        Decimal @default(0.00)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  currency     Currency     @relation(fields: [currencyId], references: [id])
+  payments     Payment[]
+
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  purchases Purchase[]
+  sales     Sale[]
+
+  @@map("kassas")
+}
+
+model Payment {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  userId         String?     @map("user_id")
+  customerId     String?     @map("customer_id")
+  kassaId        String      @map("kassa_id")
+  amount         Decimal
+  currencyId     String      @map("currency_id")
+  type           PaymentType
+  description    String?
+
+  // Универсальные ссылки
+  purchaseId String? @map("purchase_id")
+  saleId     String? @map("sale_id")
+
+  organization Organization          @relation(fields: [organizationId], references: [id])
+  user         User?                 @relation(fields: [userId], references: [id])
+  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id])
+  kassa        Kassa                 @relation(fields: [kassaId], references: [id])
+  currency     Currency              @relation(fields: [currencyId], references: [id])
+
+  purchase Purchase? @relation("PurchasePayments", fields: [purchaseId], references: [id])
+  sale     Sale?     @relation("SalePayments", fields: [saleId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("payments")
+}
+
+model Transaction {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  customerId     String      @map("customer_id")
+  relatedType    RelatedType
+  relatedId      String // SaleId, PurchesId......
+  date           DateTime    @default(now())
+  debit          Decimal     @default(0)
+  credit         Decimal     @default(0)
+  balanceAfter   Decimal
+  currencyId     String      @map("currency_id")
+  description    String?
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  customer     OrganizationCustomer @relation(fields: [customerId], references: [id])
+  currency     Currency             @relation(fields: [currencyId], references: [id])
+
+  @@map("transactions")
+}
+
+model Sale {
+  id             String     @id @default(uuid())
+  organizationId String     @map("organization_id")
+  customerId     String     @map("customer_id")
+  responsibleId  String     @map("responsible_id")
+  kassaId        String?    @map("kassa_id")
+  invoiceNumber  String     @map("invoice_number")
+  saleDate       DateTime   @default(now()) @map("sale_date")
+  totalAmount    Decimal    @map("total_amount")
+  paidAmount     Decimal    @default(0.00) @map("paid_amount")
+  currencyId     String     @map("currency_id")
+  status         SaleStatus @default(DRAFT)
+  notes          String?
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  customer     OrganizationCustomer @relation(fields: [customerId], references: [id])
+  responsible  User                 @relation(fields: [responsibleId], references: [id])
+  currency     Currency             @relation(fields: [currencyId], references: [id])
+  kassa        Kassa?               @relation(fields: [kassaId], references: [id])
+  items        SaleItem[]
+  payments     Payment[]            @relation("SalePayments")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id         String  @id @default(uuid())
+  saleId     String  @map("sale_id")
+  productId  String  @map("product_id")
+  quantity   Int
+  price      Decimal
+  total      Decimal
+  currencyId String  @map("currency_id")
+
+  sale     Sale     @relation(fields: [saleId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+  currency Currency @relation(fields: [currencyId], references: [id])
+}
+
+model Purchase {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  supplierId     String         @map("supplier_id")
+  responsibleId  String         @map("responsible_id")
+  kassaId        String?        @map("kassa_id")
+  invoiceNumber  String?
+  purchaseDate   DateTime       @default(now())
+  totalAmount    Decimal
+  paidAmount     Decimal        @default(0.00)
+  currencyId     String         @map("currency_id")
+  status         PurchaseStatus @default(DRAFT)
+  notes          String?
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  supplier     OrganizationCustomer @relation(fields: [supplierId], references: [id])
+  responsible  User                 @relation(fields: [responsibleId], references: [id])
+  currency     Currency             @relation(fields: [currencyId], references: [id])
+  kassa        Kassa?               @relation(fields: [kassaId], references: [id])
+  items        PurchaseItem[]
+  payments     Payment[]            @relation("PurchasePayments")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String  @id @default(uuid())
+  purchaseId String  @map("purchase_id")
+  productId  String  @map("product_id")
+  quantity   Int
+  price      Decimal
+  discount   Decimal @default(0.00) // 💡 скидка (на случай акций)
+  total      Decimal
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+}
+
+enum PurchaseStatus {
+  DRAFT // Черновик
+  PARTIAL // Частично оплачено
+  PAID // Полностью оплачено
+  CANCELLED // Отменено
+}
+
+enum PaymentTypeSale {
+  CASH
+  INSTALLMENT
+  TRANSFER
+}
+
+enum SaleStatus {
+  DRAFT
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum RelatedType {
+  SALE // продажа — клиент купил товар → он должен оплатить
+  PURCHASE // закупка — организация должна поставщику
+  PAYMENT // платёж — кто-то заплатил (или мы заплатили)
+  REFUND // возврат — деньги возвращены клиенту
+  ADJUSTMENT // ручная корректировка (например, исправление ошибки)
+  TRANSFER // перевод между своими кассами
+}
+
+enum PaymentType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum ReferenceType {
+  SALE
+  PURCHASE
+  OTHER
+}
+
+enum ProductAction {
+  PURCHASED // товар закуплен
+  SOLD // продан
+  RETURNED // возвращён клиентом
+  RESOLD // перепродан
+  TRANSFERRED // переведён между организациями
+}
+
+enum ProductStatus {
+  IN_STOCK // находится на складе
+  SOLD // продан
+  RETURNED // возвращён
+  LOST // утерян / списан
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum OrgUserRole {
+  OWNER
+  ADMIN
+  SELLER
+  ACCOUNTANT
+  MANAGER
+}
+
+enum CustomerType {
+  CLIENT
+  SUPPLIER
+}
+
+enum PriceType {
+  CASH //Цена при оплате наличными / сразу
+  INSTALLMENT //Рассрочка (например, на 6/12 месяцев)
+  WHOLESALE //Оптовая цена, при больших объёмах
+  ONLINE // цена в интернет-магазине (Click / Telegram)
+  SPECIAL // индивидуальная скидка / промо
+}

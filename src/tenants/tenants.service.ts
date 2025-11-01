@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Client } from 'pg';
 import { execSync } from 'child_process';
 import { ConfigService } from '@nestjs/config';
+import { execa } from "execa";
 
 @Injectable()
 export class TenantsService {
@@ -246,17 +247,55 @@ export class TenantsService {
     const databaseUrl = `postgresql://${user}:${password}@${host}:${port}/${dbName}?schema=public`;
 
     try {
-      execSync(`npx prisma migrate deploy --schema=./prisma/tenant.prisma`, {
-        env: {
-          ...process.env,
-          DATABASE_URL: databaseUrl,
-        },
-        stdio: 'inherit',
+      await execa('npm', ['run', 'migrate:tenant:deploy'], {
+        env: { ...process.env, TENANT_DATABASE_URL: databaseUrl },
+        stdio: 'inherit'
       });
       console.log(`✅ Migrations applied for ${dbName}`);
     } catch (err) {
       console.error(`❌ Migration failed for ${dbName}`, err);
       throw err;
     }
+  }
+
+  /**
+   * Применить миграции ко всем существующим tenant БД
+   * ВАЖНО: Запускать вручную после изменения tenant.prisma
+   */
+  async updateAllTenantDatabases() {
+    const tenants = await this.prisma.tenant.findMany({
+      where: {
+        status: 'ACTIVE'
+      }
+    });
+    
+    console.log(`🔄 Updating ${tenants.length} tenant databases...`);
+    
+    const results = [];
+    
+    for (const tenant of tenants) {
+      try {
+        await this.runMigrations(
+          tenant.dbName,
+          tenant.dbUser,
+          tenant.dbPassword,
+          tenant.dbHost,
+          tenant.dbPort
+        );
+        // @ts-ignore
+        results.push({ tenant: tenant.name, status: 'success' });
+        console.log(`✅ Updated ${tenant.dbName}`);
+      } catch (error) {
+        // @ts-ignore
+        results.push({
+          tenant: tenant.name, 
+          status: 'failed', 
+          error: error.message 
+        });
+        console.error(`❌ Failed to update ${tenant.dbName}:`, error);
+      }
+    }
+    
+    return results;
   }
 }

@@ -5,7 +5,7 @@ CREATE TYPE "UserRole" AS ENUM ('PLATFORM_OWNER', 'ADMIN', 'OWNER');
 CREATE TYPE "TenantStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'DELETED');
 
 -- CreateTable
-CREATE TABLE "Tenant" (
+CREATE TABLE "tenants" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "owner_id" TEXT NOT NULL,
@@ -19,11 +19,11 @@ CREATE TABLE "Tenant" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "Tenant_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "tenants_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "User" (
+CREATE TABLE "users" (
     "id" TEXT NOT NULL,
     "first_name" TEXT NOT NULL,
     "last_name" TEXT NOT NULL,
@@ -34,11 +34,11 @@ CREATE TABLE "User" (
     "updated_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "AuditTenantCreations" (
+CREATE TABLE "audit_tenant_creations" (
     "id" TEXT NOT NULL,
     "tenant_id" TEXT NOT NULL,
     "created_by" TEXT NOT NULL,
@@ -46,23 +46,23 @@ CREATE TABLE "AuditTenantCreations" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "metadata" JSONB,
 
-    CONSTRAINT "AuditTenantCreations_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "audit_tenant_creations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Tenant_name_key" ON "Tenant"("name");
+CREATE UNIQUE INDEX "tenants_name_key" ON "tenants"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Tenant_api_key_key" ON "Tenant"("api_key");
+CREATE UNIQUE INDEX "tenants_api_key_key" ON "tenants"("api_key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_phone_key" ON "User"("phone");
+CREATE UNIQUE INDEX "users_phone_key" ON "users"("phone");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- AddForeignKey
-ALTER TABLE "Tenant" ADD CONSTRAINT "Tenant_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "tenants" ADD CONSTRAINT "tenants_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AuditTenantCreations" ADD CONSTRAINT "AuditTenantCreations_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "audit_tenant_creations" ADD CONSTRAINT "audit_tenant_creations_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
