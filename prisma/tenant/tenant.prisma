@@ -3,545 +3,762 @@ generator client {
   output   = "../../node_modules/.prisma/client-tenant"
 }
 
+generator docs {
+  provider = "node node_modules/prisma-docs-generator"
+  output   = "../../docs"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("TENANT_DATABASE_URL")
 }
 
+/**
+ * Таблица валют (currencies)
+ * Хранит информацию о доступных валютах в системе: их код, название и символ.
+ * Используется для финансовых операций (платежи, кассы, продажи, покупки и т.д.)
+ */
 model Currency {
-  id        String   @id @default(uuid())
-  code      String   @unique // ISO код: UZS, USD, EUR
-  name      String // Полное название валюты
-  symbol    String // Символ: $, €, so’m
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid()) /* Уникальный идентификатор валюты, пример: "b24c7d4a-1e2b-43a7-9c8b-123456789abc" */
+  code      String   @unique /* ISO код валюты, пример: "USD", "UZS", "EUR" */
+  name      String /* Полное название валюты, пример: "Доллар США" или "Узбекский сум" */
+  symbol    String /* Символ валюты, пример: "$", "€", "so’m" */
+  createdAt DateTime @default(now()) @map("created_at") /* Дата и время создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи, обновляется автоматически */
 
-  product_prices ProductPrice[]
-  kassas         Kassa[]
-  payments       Payment[]
-  transactions   Transaction[]
-  sales          Sale[]
-  sale_items     SaleItem[]
-  purchases      Purchase[]
-  from_transfers KassaTransfer[] @relation("FromCurrencyRelation")
-  to_transfers   KassaTransfer[] @relation("ToCurrencyRelation")
-  settings       Settings[]
+  /**
+   * Связи с другими таблицами
+   */
+  product_prices ProductPrice[] /* Цены на товары, привязанные к валюте */
+  kassas         Kassa[] /* Кассы, работающие в этой валюте */
+  payments       Payment[] /* Платежи, совершённые в этой валюте */
+  transactions   Transaction[] /* Финансовые транзакции, связанные с валютой */
+  sales          Sale[] /* Продажи, проведённые в этой валюте */
+  sale_items     SaleItem[] /* Товары, проданные в этой валюте */
+  purchases      Purchase[] /* Закупки, проведённые в этой валюте */
+  from_transfers KassaTransfer[] @relation("FromCurrencyRelation") /* Переводы, исходящие из этой валюты */
+  to_transfers   KassaTransfer[] @relation("ToCurrencyRelation") /* Переводы, поступающие в эту валюту */
+  settings       Settings[] /* Настройки, где указана валюта по умолчанию или используемая */
 
   @@map("currencies")
 }
 
+/**
+ * Курс валюты
+ */
 model CurrencyRate {
-  id             String   @id @default(uuid())
-  baseCurrency   String
-  targetCurrency String
-  rate           Decimal
-  date           DateTime @default(now())
+  id             String   @id @default(uuid()) /*uuid*/
+  baseCurrency   String /*Валюта, из которой производится конвертация. */
+  targetCurrency String /* Валюта, в которую конвертируется. */
+  rate           Decimal /*Курс обмена. Показывает, сколько единиц targetCurrency равны 1 единице baseCurrency. */
+  date           DateTime @default(now()) /* Дата и время, на которые установлен этот курс. Обычно хранится для истории. */
+
+  @@map("currency_rates") // Необязательно, но полезно для единообразия
 }
 
+/**
+ * Таблица организаций (organizations)
+ * Хранит данные о компаниях или филиалах, использующих систему.
+ * Каждая организация имеет собственных пользователей, клиентов, товары и финансовые операции.
+ */
 model Organization {
-  id      String  @id @default(uuid())
-  name    String
-  address String?
-  phone   String? @unique
-  email   String? @unique
+  id      String  @id @default(uuid()) /* Уникальный идентификатор организации, пример: "b12a34c5-6d78-9e0f-1234-56789abcdef0" */
+  name    String /* Название организации, пример: "ООО TechWorld" или "ИП Абдурахимов М.Ю." */
+  address String? /* Адрес организации, пример: "г. Ташкент, ул. Амира Темура, 45" */
+  phone   String? @unique /* Уникальный номер телефона организации, пример: "+998901234567" */
+  email   String? @unique /* Уникальный адрес электронной почты организации, пример: "info@techworld.uz" */
 
-  org_users OrganizationUser[]
-  customers OrganizationCustomer[]
+  /**
+   * Связи с другими таблицами
+   */
+  org_users OrganizationUser[] /* Список пользователей, принадлежащих организации */
+  customers OrganizationCustomer[] /* Список клиентов, связанных с организацией */
 
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
-  products          Product[]
-  product_prices    ProductPrice[]
-  product_instances ProductInstance[] @relation("OrgProductInstances")
-  kassas            Kassa[]
-  payments          Payment[]
-  transactions      Transaction[]
-  sales             Sale[]
-  purchases         Purchase[]
-  stocks            Stock[]
-  kassa_transfers   KassaTransfer[]
-  settings          Settings?
-  audit_logs        AuditLog[]
-  documents         Document[]
+  createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
+
+  products          Product[] /* Товары, принадлежащие организации */
+  product_prices    ProductPrice[] /* Цены товаров в контексте организации */
+  product_instances ProductInstance[] @relation("OrgProductInstances") /* Конкретные экземпляры товаров (например, по серийным номерам) */
+  kassas            Kassa[] /* Кассы, зарегистрированные в этой организации */
+  payments          Payment[] /* Все платежи, проведённые организацией */
+  transactions      Transaction[] /* Финансовые транзакции организации */
+  sales             Sale[] /* Продажи, совершённые организацией */
+  purchases         Purchase[] /* Закупки, выполненные организацией */
+  stocks            Stock[] /* Складские остатки и движение товаров */
+  kassa_transfers   KassaTransfer[] /* Переводы между кассами организации */
+  settings          Settings? /* Настройки, уникальные для организации (например, валюта по умолчанию) */
+  audit_logs        AuditLog[] /* Журнал действий пользователей внутри организации */
+  documents         Document[] /* Документы, связанные с организацией (накладные, акты и т.д.) */
 
   @@map("organizations")
 }
 
+/**
+ * Таблица пользователей (users)
+ * Хранит данные о пользователях системы: логин, пароль, статус, роль и связи с организациями.
+ * Каждый пользователь может быть сотрудником одной или нескольких организаций, совершать платежи и вести продажи.
+ */
 model User {
-  id                   String                 @id @default(uuid())
-  email                String?                @unique
-  password             String
-  isActive             Boolean                @default(true) @map("is_active")
-  profile              UserProfile?
-  createdAt            DateTime               @default(now()) @map("created_at")
-  updatedAt            DateTime               @updatedAt @map("updated_at")
-  role                 Role?                  @relation(fields: [roleId], references: [id])
-  roleId               String?
-  org_links            OrganizationUser[]
-  cutomer_links        OrganizationCustomer[]
-  payments             Payment[]
-  sales                Sale[]
-  purchases            Purchase[]
-  phone_numbers        UserPhone[]
-  audit_logs           AuditLog[]
-  documents            Document[]
-  installment_payments InstallmentPayment[]
+  id        String       @id @default(uuid()) /* Уникальный идентификатор пользователя, пример: "d34f56a7-8b90-4e12-9cde-001122334455" */
+  email     String?      @unique /* Уникальный email пользователя для входа, пример: "user@example.com" */
+  password  String /* Хэшированный пароль пользователя, пример (не хранится в открытом виде): "$2b$10$abcd..." */
+  isActive  Boolean      @default(true) @map("is_active") /* Статус активности пользователя: true — активен, false — заблокирован */
+  profile   UserProfile? /* Профиль пользователя с дополнительной информацией (имя, фото и т.д.) */
+  createdAt DateTime     @default(now()) @map("created_at") /* Дата и время создания пользователя, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime     @updatedAt @map("updated_at") /* Дата последнего обновления данных пользователя */
+
+  /**
+   * Роль пользователя
+   */
+  role   Role?   @relation(fields: [roleId], references: [id]) /* Роль пользователя в системе, например: администратор, кассир */
+  roleId String? /* Идентификатор роли, пример: "a1b2c3d4-e5f6-7890-1234-56789abcdef0" */
+
+  /**
+   * Связи с другими таблицами
+   */
+  org_links            OrganizationUser[] /* Связь пользователя с организациями (через промежуточную таблицу) */
+  cutomer_links        OrganizationCustomer[] /* Связь пользователя с клиентами организации (если он назначен как контактное лицо) */
+  payments             Payment[] /* Платежи, проведённые пользователем */
+  sales                Sale[] /* Продажи, оформленные пользователем */
+  purchases            Purchase[] /* Закупки, оформленные пользователем */
+  phone_numbers        UserPhone[] /* Дополнительные номера телефонов пользователя */
+  audit_logs           AuditLog[] /* Лог действий пользователя в системе (например, авторизация, редактирование данных) */
+  documents            Document[] /* Документы, созданные или загруженные пользователем */
+  installment_payments InstallmentPayment[] /* Платежи по рассрочке, проведённые пользователем */
 
   @@map("users")
 }
 
+/**
+ * Таблица профилей пользователей (user_profiles)
+ * Хранит детальную личную информацию о пользователях — ФИО, паспортные данные, дату рождения и адрес.
+ * Каждый профиль связан с одним пользователем из таблицы users.
+ */
 model UserProfile {
-  id             String    @id @default(uuid())
-  userId         String    @unique @map("user_id")
-  firstName      String    @map("first_name")
-  lastName       String    @map("last_name")
-  patronymic     String?
-  dateOfBirth    DateTime? @map("date_of_birth")
-  gender         Gender    @default(OTHER)
-  passportSeries String?   @map("passport_series")
-  passportNumber String?   @map("passport_number")
-  issuedBy       String?   @map("issued_by")
-  issuedDate     DateTime? @map("issued_date")
-  expiryDate     DateTime? @map("expiry_date")
-  country        String?
-  region         String?
-  city           String?
-  address        String?
-  registration   String?
-  district       String?   @map("district") // <--- добавляем сюда hudud
-  user           User      @relation(fields: [userId], references: [id])
+  id     String @id @default(uuid()) /* Уникальный идентификатор профиля, пример: "c45d67e8-9f01-4a23-8bcd-001122334455" */
+  userId String @unique @map("user_id") /* Идентификатор пользователя, к которому относится профиль, пример: "d34f56a7-8b90-4e12-9cde-001122334455" */
+
+  firstName  String  @map("first_name") /* Имя пользователя, пример: "Мухаммад Юсуф" */
+  lastName   String  @map("last_name") /* Фамилия пользователя, пример: "Абдурахимов" */
+  patronymic String? /* Отчество (необязательно), пример: "Юсуфович" */
+
+  dateOfBirth DateTime? @map("date_of_birth") /* Дата рождения пользователя, пример: "2003-05-14T00:00:00Z" */
+  gender      Gender    @default(OTHER) /* Пол пользователя, пример: MALE, FEMALE, OTHER */
+
+  passportSeries String?   @map("passport_series") /* Серия паспорта, пример: "AA1234567" */
+  passportNumber String?   @map("passport_number") /* Номер паспорта, пример: "12345671234567" */
+  issuedBy       String?   @map("issued_by") /* Орган, выдавший паспорт, пример: "ОВИР Мирободского района" */
+  issuedDate     DateTime? @map("issued_date") /* Дата выдачи паспорта, пример: "2020-06-10T00:00:00Z" */
+  expiryDate     DateTime? @map("expiry_date") /* Дата окончания действия паспорта, пример: "2030-06-10T00:00:00Z" */
+
+  country      String? /* Страна проживания, пример: "Узбекистан" */
+  region       String? /* Область, пример: "Ташкентская область" */
+  city         String? /* Город, пример: "Ташкент" */
+  address      String? /* Адрес проживания, пример: "ул. Амира Темура, дом 45" */
+  registration String? /* Адрес прописки, пример: "г. Ташкент, Шайхонтохурский район" */
+  district     String? @map("district") /* Район (hudud), пример: "Мирзо-Улугбекский район" */
+
+  user User @relation(fields: [userId], references: [id]) /* Связь с пользователем, которому принадлежит профиль */
 
   @@map("user_profiles")
 }
 
+/**
+ * Модель Role хранит роли пользователей в системе.
+ * Используется для разграничения прав и доступа к функционалу.
+ */
+model Role {
+  id          String  @id @default(uuid()) /* Уникальный идентификатор роли, пример: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d" */
+  name        String  @unique /* Название роли, пример: "ADMIN", "MANAGER", "CASHIER" */
+  description String? /* Описание роли, пример: "Роль с полным доступом к системе" */
+  users       User[] /* Пользователи, которым назначена эта роль */
+
+  @@map("roles") /* Название таблицы в базе данных */
+}
+
+/**
+ * Таблица номеров телефонов пользователей (user_phones)
+ * Хранит список телефонов, привязанных к пользователям.
+ * Может содержать несколько номеров для одного пользователя (рабочий, личный и т.д.), один из которых отмечается как основной.
+ */
 model UserPhone {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  phone     String   @unique
-  note      String?
-  isPrimary Boolean  @default(false) @map("is_primary")
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid()) /* Уникальный идентификатор записи, пример: "e56f78a9-bc01-4d23-9def-001122334455" */
+  userId    String   @map("user_id") /* Идентификатор пользователя, которому принадлежит номер, пример: "d34f56a7-8b90-4e12-9cde-001122334455" */
+  phone     String   @unique /* Уникальный номер телефона пользователя, пример: "+998901234567" */
+  note      String? /* Примечание к номеру, пример: "рабочий", "личный", "дополнительный" */
+  isPrimary Boolean  @default(false) @map("is_primary") /* Отметка, является ли номер основным. Пример: true — основной, false — дополнительный */
+  user      User     @relation(fields: [userId], references: [id]) /* Связь с пользователем, которому принадлежит телефон */
+  createdAt DateTime @default(now()) @map("created_at") /* Дата добавления номера, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
   @@map("user_phones")
 }
 
+/**
+ * Таблица связей пользователей с организациями (organization_users)
+ * Отражает, в каких организациях зарегистрирован пользователь и какую роль он там выполняет.
+ * Используется для управления доступами, должностями и распределением ответственности.
+ */
 model OrganizationUser {
-  id             String       @id @default(uuid())
-  organizationId String       @map("organization_id")
-  userId         String       @map("user_id")
-  role           OrgUserRole
-  position       String?
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  user           User         @relation(fields: [userId], references: [id])
+  id             String      @id @default(uuid()) /* Уникальный идентификатор записи, пример: "a12b34c5-d67e-890f-1234-56789abcdef0" */
+  organizationId String      @map("organization_id") /* Идентификатор организации, пример: "b24c7d4a-1e2b-43a7-9c8b-123456789abc" */
+  userId         String      @map("user_id") /* Идентификатор пользователя, связанного с организацией, пример: "d34f56a7-8b90-4e12-9cde-001122334455" */
+  role           OrgUserRole /* Роль пользователя внутри организации, пример: ADMIN, MANAGER, CASHIER */
+  position       String? /* Должность или звание пользователя, пример: "Главный бухгалтер" или "Кассир" */
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с таблицей организаций */
+  user         User         @relation(fields: [userId], references: [id]) /* Связь с таблицей пользователей */
+
+  createdAt DateTime @default(now()) @map("created_at") /* Дата добавления связи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего изменения данных связи */
 
   @@map("organization_users")
 }
 
+/**
+ * Таблица клиентов организации (organization_customers)
+ * Хранит информацию о клиентах, связанных с конкретной организацией.
+ * Может содержать как зарегистрированных пользователей системы, так и внешних клиентов (без userId).
+ * Используется для учёта продаж, платежей, рассрочек и взаимодействий с клиентами.
+ */
 model OrganizationCustomer {
-  id                String            @id @default(uuid())
-  organizationId    String            @map("organization_id")
-  userId            String?           @map("user_id")
-  name              String
-  phone             String
-  type              CustomerType
-  isBlacklisted     Boolean           @default(false) @map("is_blacklisted")
-  organization      Organization      @relation(fields: [organizationId], references: [id])
-  user              User?             @relation(fields: [userId], references: [id])
-  product_instances ProductInstance[] @relation("CustomerProductInstances")
-  payments          Payment[]
-  transactions      Transaction[]
-  sales             Sale[]
-  purchases         Purchase[]
-  installments      Installment[]
-  documents         Document[]
+  id             String  @id @default(uuid()) /* Уникальный идентификатор клиента, пример: "c56d78a9-bc01-4e23-9def-001122334455" */
+  organizationId String  @map("organization_id") /* Идентификатор организации, к которой принадлежит клиент, пример: "b24c7d4a-1e2b-43a7-9c8b-123456789abc" */
+  userId         String? @map("user_id") /* Идентификатор пользователя, если клиент зарегистрирован в системе, пример: "d34f56a7-8b90-4e12-9cde-001122334455" */
+
+  name          String /* Имя или наименование клиента, пример: "Азиз Ахмедов" или "ИП Алимов" */
+  phone         String /* Контактный номер клиента, пример: "+998901112233" */
+  type          CustomerType /* Тип клиента: пример: INDIVIDUAL (физ. лицо) или BUSINESS (юр. лицо) */
+  isBlacklisted Boolean      @default(false) @map("is_blacklisted") /* Отметка, внесён ли клиент в "чёрный список". Пример: true — заблокирован, false — активен */
+
+  /**
+   * Связи с другими таблицами
+   */
+  organization      Organization      @relation(fields: [organizationId], references: [id]) /* Организация, к которой относится клиент */
+  user              User?             @relation(fields: [userId], references: [id]) /* Пользователь, если клиент зарегистрирован в системе */
+  product_instances ProductInstance[] @relation("CustomerProductInstances") /* Список экземпляров товаров, связанных с клиентом (например, проданных устройств) */
+  payments          Payment[] /* Платежи, совершённые клиентом */
+  transactions      Transaction[] /* Финансовые операции, связанные с клиентом */
+  sales             Sale[] /* Продажи, проведённые клиенту */
+  purchases         Purchase[] /* Закупки клиента, если он также поставщик */
+  installments      Installment[] /* Рассрочки, оформленные клиентом */
+  documents         Document[] /* Документы, связанные с клиентом (договоры, акты, счета и т.д.) */
 
   @@map("organization_customers")
 }
 
+/**
+ * Таблица брендов (brands)
+ * Хранит информацию о производителях или торговых марках товаров.
+ * Каждый бренд может быть связан с несколькими продуктами.
+ */
 model Brand {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  products  Product[]
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id        String    @id @default(uuid()) /* Уникальный идентификатор бренда, пример: "a12b34c5-d67e-890f-1234-56789abcdef0" */
+  name      String    @unique /* Уникальное название бренда, пример: "Samsung", "Apple", "Xiaomi" */
+  products  Product[] /* Список товаров, принадлежащих этому бренду */
+  createdAt DateTime  @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime  @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
   @@map("brands")
 }
 
+/**
+ * Таблица продуктов (products) — хранит информацию о товарах, принадлежащих организациям.
+ */
 model Product {
-  id             String    @id @default(uuid())
-  organizationId String    @map("organization_id")
-  name           String
-  description    String?
-  expiry_date    DateTime? @map("expiry_date")
-  serial_number  String?   @unique @map("serial_number")
-  barcode        String?   @unique
+  id             String    @id @default(uuid()) /* Уникальный идентификатор товара, пример: "b123c456-d789-4ef0-9123-4567abcde890" */
+  organizationId String    @map("organization_id") /* ID организации, которой принадлежит товар */
+  name           String /* Название товара, пример: "iPhone 15 Pro" */
+  description    String? /* Описание товара, пример: "Смартфон с 256 ГБ памяти" */
+  expiry_date    DateTime? @map("expiry_date") /* Дата истечения срока годности, если применимо */
+  serial_number  String?   @unique @map("serial_number") /* Уникальный серийный номер, пример: "SN1234567890" */
+  barcode        String?   @unique /* Уникальный штрихкод, пример: "4789651234789" */
+  brandId        String?   @map("brand_id") /* ID бренда товара, если указан */
 
-  brandId String? @map("brand_id")
+  organization    Organization      @relation(fields: [organizationId], references: [id]) /* Связь с организацией, которой принадлежит товар */
+  brand           Brand?            @relation(fields: [brandId], references: [id]) /* Связь с брендом, например "Apple" или "Samsung" */
+  categories      ProductCategory[] /* Категории, к которым принадлежит товар (многие-ко-многим) */
+  prices          ProductPrice[] /* Цены товара в разных валютах или магазинах */
+  instances       ProductInstance[] /* Конкретные экземпляры товара (например, разные устройства с уникальными серийными номерами) */
+  createdAt       DateTime          @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt       DateTime          @updatedAt @map("updated_at") /* Дата последнего обновления записи */
+  sele_items      SaleItem[] /* Продажи, в которых участвовал данный товар */
+  purchase_items  PurchaseItem[] /* Закупки, связанные с этим товаром */
+  stocks          Stock[] /* Остатки товара на складе */
+  product_batches ProductBatch[] /* Партии товара, например для учёта сроков годности */
 
-  organization Organization      @relation(fields: [organizationId], references: [id])
-  brand        Brand?            @relation(fields: [brandId], references: [id])
-  categories   ProductCategory[]
-  prices       ProductPrice[]
-  instances    ProductInstance[]
-
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-  sele_items      SaleItem[]
-  purchase_items  PurchaseItem[]
-  stocks          Stock[]
-  product_batches ProductBatch[]
-
-  @@map("products")
+  @@map("products") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Таблица категорий (categories) — хранит список категорий товаров, например "Смартфоны", "Ноутбуки", "Аксессуары".
+ */
 model Category {
-  id       String            @id @default(uuid())
-  name     String            @unique
-  products ProductCategory[] // связь через промежуточную таблицу
+  id        String            @id @default(uuid()) /* Уникальный идентификатор категории, пример: "d3b6a4f1-90c7-4e1e-9d8e-64f3b1a0a2d3" */
+  name      String            @unique /* Название категории, должно быть уникальным, пример: "Смартфоны" */
+  products  ProductCategory[] /* Связь многие-ко-многим с товарами через промежуточную таблицу ProductCategory */
+  createdAt DateTime          @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime          @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("categories")
+  @@map("categories") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Таблица связи товаров и категорий (product_categories) — связывает товары с их категориями, реализуя связь многие-ко-многим.
+ */
 model ProductCategory {
-  productId  String
-  categoryId String
+  productId  String /* ID товара, пример: "b123c456-d789-4ef0-9123-4567abcde890" */
+  categoryId String /* ID категории, пример: "d3b6a4f1-90c7-4e1e-9d8e-64f3b1a0a2d3" */
+  product    Product  @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
+  category   Category @relation(fields: [categoryId], references: [id]) /* Связь с таблицей категорий (Category) */
 
-  product  Product  @relation(fields: [productId], references: [id])
-  category Category @relation(fields: [categoryId], references: [id])
-
-  @@id([productId, categoryId]) // составной первичный ключ
-  @@map("product_categories")
+  @@id([productId, categoryId]) /* Составной первичный ключ: уникальная пара "товар + категория" */
+  @@map("product_categories") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Таблица цен товаров (product_prices) — хранит информацию о стоимости товара в разных валютах, типах цен и для разных клиентов.
+ */
 model ProductPrice {
-  id             String        @id @default(uuid())
-  productId      String        @map("product_id")
-  organizationId String?       @map("organization_id")
-  priceType      PriceType     @map("price_type")
-  amount         Decimal       @map("amount")
-  currencyId     String        @map("currency_id")
-  currency       Currency      @relation(fields: [currencyId], references: [id])
-  product        Product       @relation(fields: [productId], references: [id])
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  customerType   CustomerType? @map("customer_type") // CLIENT, SUPPLIER и т.д.
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id             String        @id @default(uuid()) /* Уникальный идентификатор цены, пример: "b123c456-d789-4ef0-9123-4567abcde890" */
+  productId      String        @map("product_id") /* ID товара, к которому относится данная цена */
+  organizationId String?       @map("organization_id") /* ID организации, для которой указана цена (если применимо) */
+  priceType      PriceType     @map("price_type") /* Тип цены: например, RETAIL (розничная), WHOLESALE (оптовая) */
+  amount         Decimal       @map("amount") /* Сумма цены в валюте, пример: 1299.99 */
+  currencyId     String        @map("currency_id") /* ID валюты, в которой указана цена */
+  currency       Currency      @relation(fields: [currencyId], references: [id]) /* Связь с таблицей валют (Currency) */
+  product        Product       @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
+  organization   Organization? @relation(fields: [organizationId], references: [id]) /* Связь с организацией, если цена специфична для неё */
+  customerType   CustomerType? @map("customer_type") /* Тип клиента, для которого установлена цена: например, CLIENT или SUPPLIER */
+  createdAt      DateTime      @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt      DateTime      @updatedAt @map("updated_at") /* Дата последнего обновления записи */
+
+  @@map("product_prices") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Таблица экземпляров товаров (product_instances) — хранит конкретные экземпляры товаров с уникальными серийными номерами и статусами.
+ */
 model ProductInstance {
-  id             String        @id @default(uuid())
-  productId      String        @map("product_id")
-  serialNumber   String        @unique @map("serial_number")
-  currentOwnerId String?       @map("current_owner_id")
-  currentStatus  ProductStatus @default(IN_STOCK) @map("current_status")
-  organizationId String        @map("organization_id")
+  id             String        @id @default(uuid()) /* Уникальный идентификатор экземпляра товара, пример: "f12a34b5-c678-9def-0123-456789abcdef" */
+  productId      String        @map("product_id") /* ID товара, к которому принадлежит данный экземпляр */
+  serialNumber   String        @unique @map("serial_number") /* Уникальный серийный номер устройства, пример: "SN-ABC-123456" */
+  currentOwnerId String?       @map("current_owner_id") /* ID текущего владельца (клиента), если товар уже продан */
+  currentStatus  ProductStatus @default(IN_STOCK) @map("current_status") /* Текущий статус экземпляра: например, IN_STOCK, SOLD, RETURNED */
+  organizationId String        @map("organization_id") /* ID организации, которой принадлежит этот экземпляр */
 
-  product       Product               @relation(fields: [productId], references: [id])
-  organization  Organization          @relation("OrgProductInstances", fields: [organizationId], references: [id])
-  current_owner OrganizationCustomer? @relation("CustomerProductInstances", fields: [currentOwnerId], references: [id])
-  transactions  ProductTransaction[]
+  product       Product               @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
+  organization  Organization          @relation("OrgProductInstances", fields: [organizationId], references: [id]) /* Связь с организацией-владельцем товара */
+  current_owner OrganizationCustomer? @relation("CustomerProductInstances", fields: [currentOwnerId], references: [id]) /* Текущий владелец товара (клиент) */
+  transactions  ProductTransaction[] /* История транзакций по этому экземпляру товара */
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
-  @@map("product_instances")
+  @@map("product_instances") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Таблица транзакций товаров (product_transactions) — хранит историю перемещений и действий с конкретными экземплярами товаров.
+ */
 model ProductTransaction {
-  id                String        @id @default(uuid())
-  productInstanceId String        @map("product_instance_id")
-  fromCustomerId    String?       @map("from_customer_id")
-  toCustomerId      String?       @map("to_customer_id")
-  toOrganizationId  String?       @map("to_organization_id")
-  saleId            String?       @map("sale_id") // связь с продажей, если нужно
-  action            ProductAction
-  date              DateTime      @default(now())
-  description       String?
+  id                String          @id @default(uuid()) /* Уникальный идентификатор транзакции, пример: "a12b34c5-d67e-890f-1234-56789abcdef0" */
+  productInstanceId String          @map("product_instance_id") /* ID экземпляра товара, к которому относится транзакция */
+  fromCustomerId    String?         @map("from_customer_id") /* ID клиента, от которого поступил товар (если применимо) */
+  toCustomerId      String?         @map("to_customer_id") /* ID клиента, которому передан товар (если применимо) */
+  toOrganizationId  String?         @map("to_organization_id") /* ID организации, получившей товар (например, при возврате) */
+  saleId            String?         @map("sale_id") /* ID продажи, если транзакция связана с продажей товара */
+  action            ProductAction /* Тип действия: например, SOLD, RETURNED, TRANSFERRED */
+  date              DateTime        @default(now()) /* Дата и время транзакции, пример: "2025-11-02T12:00:00Z" */
+  description       String? /* Дополнительное описание или комментарий к транзакции, пример: "Возврат по гарантии" */
+  product_instance  ProductInstance @relation(fields: [productInstanceId], references: [id]) /* Связь с экземпляром товара (ProductInstance) */
 
-  product_instance ProductInstance @relation(fields: [productInstanceId], references: [id])
-
-  @@map("product_transactions")
+  @@map("product_transactions") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Таблица партий товаров (product_batches) — хранит данные о партиях поставленных или произведённых товаров, включая срок годности и количество.
+ */
 model ProductBatch {
-  id          String    @id @default(uuid())
-  productId   String    @map("product_id")
-  batchNumber String    @map("batch_number")
-  expiryDate  DateTime? @map("expiry_date")
-  quantity    Int
-  isValid     Boolean   @default(true) @map("is_valid")
+  id          String    @id @default(uuid()) /* Уникальный идентификатор партии, пример: "a12b34c5-d67e-890f-1234-56789abcdef0" */
+  productId   String    @map("product_id") /* ID товара, к которому относится данная партия */
+  batchNumber String    @map("batch_number") /* Номер партии, пример: "BATCH-2025-001" */
+  expiryDate  DateTime? @map("expiry_date") /* Срок годности партии, если применимо, пример: "2026-05-30T00:00:00Z" */
+  quantity    Int /* Количество единиц товара в партии, пример: 500 */
+  isValid     Boolean   @default(true) @map("is_valid") /* Статус активности партии: true — активна, false — просрочена или списана */
+  product     Product   @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
 
-  product Product @relation(fields: [productId], references: [id])
+  @@map("product_batches") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Таблица складских остатков (stocks) — хранит информацию о количестве каждого товара на складе конкретной организации.
+ */
 model Stock {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  productId      String   @map("product_id")
-  quantity       Int      @default(0)
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id             String       @id @default(uuid()) /* Уникальный идентификатор записи склада, пример: "e12f34a5-b67c-890d-1234-56789abcdef0" */
+  organizationId String       @map("organization_id") /* ID организации, которой принадлежит данный складской остаток */
+  productId      String       @map("product_id") /* ID товара, который хранится на складе */
+  quantity       Int          @default(0) /* Текущее количество единиц товара на складе, пример: 150 */
+  updatedAt      DateTime     @updatedAt @map("updated_at") /* Дата и время последнего обновления записи, пример: "2025-11-02T12:00:00Z" */
+  organization   Organization @relation(fields: [organizationId], references: [id]) /* Связь с таблицей организаций (Organization) */
+  product        Product      @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  product      Product      @relation(fields: [productId], references: [id])
-
-  @@map("stocks")
+  @@map("stocks") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Модель Kassa представляет кассу организации, где хранятся денежные средства в разных валютах и типах (наличные, электронные, банковские).
+ * Каждая касса связана с организацией, валютой и может участвовать в операциях оплат, продаж, покупок и переводов между кассами.
+ */
 model Kassa {
-  id             String  @id @default(uuid())
-  organizationId String  @map("organization_id")
-  name           String // например: "Наличные UZS", "Click", "USD касса"
-  type           String // пользователь сам укажет тип (нал, банк, электронная)
-  currencyId     String  @map("currency_id")
-  balance        Decimal @default(0.00)
+  id             String  @id @default(uuid()) /* Уникальный идентификатор кассы, пример: "b7e2b8c0-4a6f-4d73-9e4f-9f18a96f5e02" */
+  organizationId String  @map("organization_id") /* ID организации, к которой принадлежит касса */
+  name           String /* Название кассы, пример: "Наличные UZS" или "Click-платежи" */
+  type           String /* Тип кассы, пример: "наличные", "банк", "электронная" */
+  currencyId     String  @map("currency_id") /* Валюта кассы, ссылается на таблицу Currency */
+  balance        Decimal @default(0.00) /* Текущий баланс кассы, пример: 1520000.50 */
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  currency     Currency     @relation(fields: [currencyId], references: [id])
-  payments     Payment[]
+  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией-владельцем кассы */
+  currency     Currency     @relation(fields: [currencyId], references: [id]) /* Связь с валютой кассы */
+  payments     Payment[] /* Оплаты, проведённые через эту кассу */
 
-  createdAt          DateTime        @default(now()) @map("created_at")
-  updatedAt          DateTime        @updatedAt @map("updated_at")
-  purchases          Purchase[]
-  sales              Sale[]
-  outgoing_transfers KassaTransfer[] @relation("FromKassaRelation")
-  incoming_transfers KassaTransfer[] @relation("ToKassaRelation")
+  createdAt          DateTime        @default(now()) @map("created_at") /* Дата и время создания записи */
+  updatedAt          DateTime        @updatedAt @map("updated_at") /* Дата последнего обновления */
+  purchases          Purchase[] /* Список покупок, оплаченных через эту кассу */
+  sales              Sale[] /* Список продаж, связанных с этой кассой */
+  outgoing_transfers KassaTransfer[] @relation("FromKassaRelation") /* Переводы, отправленные из этой кассы */
+  incoming_transfers KassaTransfer[] @relation("ToKassaRelation") /* Переводы, полученные в эту кассу */
 
-  @@map("kassas")
+  @@map("kassas") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель KassaTransfer представляет перевод средств между двумя кассами внутри одной организации.
+ * Она хранит информацию о кассе-источнике, кассе-получателе, используемых валютах, сумме перевода, курсе и пересчитанной сумме.
+ */
 model KassaTransfer {
-  id              String   @id @default(uuid())
-  organizationId  String   @map("organization_id")
-  fromKassaId     String   @map("from_kassa_id")
-  toKassaId       String   @map("to_kassa_id")
-  fromCurrencyId  String   @map("from_currency_id")
-  toCurrencyId    String   @map("to_currency_id")
-  rate            Decimal  @default(1) // курс, например 1 USD = 12500 UZS 
-  amount          Decimal // сумма в валюте источника
-  convertedAmount Decimal  @map("converted_amount") // сумма после пересчёта в валюту назначения
-  description     String?
-  createdAt       DateTime @default(now()) @map("created_at")
+  id              String   @id @default(uuid()) /* Уникальный идентификатор перевода, пример: "e29b4ac3-0b92-4f6b-b56f-3a78fa2a9a3d" */
+  organizationId  String   @map("organization_id") /* ID организации, к которой относится перевод */
+  fromKassaId     String   @map("from_kassa_id") /* ID кассы-источника перевода */
+  toKassaId       String   @map("to_kassa_id") /* ID кассы-получателя перевода */
+  fromCurrencyId  String   @map("from_currency_id") /* ID валюты, из которой производится перевод */
+  toCurrencyId    String   @map("to_currency_id") /* ID валюты, в которую производится перевод */
+  rate            Decimal  @default(1) /* Курс перевода, пример: 1 USD = 12500 UZS */
+  amount          Decimal /* Сумма перевода в валюте источника, пример: 100.00 */
+  convertedAmount Decimal  @map("converted_amount") /* Сумма после пересчёта в валюту получателя, пример: 1250000.00 */
+  description     String? /* Описание или примечание к переводу, пример: "Перевод из кассы USD в кассу UZS" */
+  createdAt       DateTime @default(now()) @map("created_at") /* Дата и время создания перевода */
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  // 🟢 Здесь мы указываем relation name, потому что Kassa участвует дважды
-  from_kassa   Kassa        @relation("FromKassaRelation", fields: [fromKassaId], references: [id])
-  to_kassa     Kassa        @relation("ToKassaRelation", fields: [toKassaId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией-владельцем */
+  from_kassa   Kassa        @relation("FromKassaRelation", fields: [fromKassaId], references: [id]) /* Касса, откуда отправлены средства */
+  to_kassa     Kassa        @relation("ToKassaRelation", fields: [toKassaId], references: [id]) /* Касса, куда зачислены средства */
 
-  // 🟢 То же самое для Currency
-  from_currency Currency @relation("FromCurrencyRelation", fields: [fromCurrencyId], references: [id])
-  to_currency   Currency @relation("ToCurrencyRelation", fields: [toCurrencyId], references: [id])
+  from_currency Currency @relation("FromCurrencyRelation", fields: [fromCurrencyId], references: [id]) /* Валюта источника */
+  to_currency   Currency @relation("ToCurrencyRelation", fields: [toCurrencyId], references: [id]) /* Валюта получателя */
 
-  @@map("kassa_transfers")
+  @@map("kassa_transfers") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель Payment хранит информацию об оплатах — будь то поступление от клиента или расход на поставщика.
+ * Может быть связана с продажей, покупкой, клиентом, кассой и валютой.
+ */
 model Payment {
-  id             String      @id @default(uuid())
-  organizationId String      @map("organization_id")
-  userId         String?     @map("user_id")
-  customerId     String?     @map("customer_id")
-  kassaId        String      @map("kassa_id")
-  amount         Decimal
-  currencyId     String      @map("currency_id")
-  type           PaymentType
-  description    String?
+  id             String      @id @default(uuid()) /* Уникальный идентификатор платежа, пример: "f6c93b1e-2e32-4b3d-9af1-02c7bfa9f7e3" */
+  organizationId String      @map("organization_id") /* ID организации, к которой относится платёж */
+  userId         String?     @map("user_id") /* Пользователь, который провёл оплату (например, кассир) */
+  customerId     String?     @map("customer_id") /* Клиент, от которого или которому поступает платёж */
+  kassaId        String      @map("kassa_id") /* Касса, из которой произведён или в которую поступил платёж */
+  amount         Decimal /* Сумма платежа, пример: 500000.00 */
+  currencyId     String      @map("currency_id") /* Валюта платежа, пример: "USD", "UZS" */
+  type           PaymentType /* Тип платежа, пример: INCOME (поступление) или EXPENSE (расход) */
+  description    String? /* Описание платежа, пример: "Оплата по счёту №1234" */
 
-  // Универсальные ссылки
-  purchaseId String? @map("purchase_id")
-  saleId     String? @map("sale_id")
+  purchaseId String? @map("purchase_id") /* Если это оплата за покупку — ссылка на Purchase */
+  saleId     String? @map("sale_id") /* Если это оплата за продажу — ссылка на Sale */
 
-  organization Organization          @relation(fields: [organizationId], references: [id])
-  user         User?                 @relation(fields: [userId], references: [id])
-  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id])
-  kassa        Kassa                 @relation(fields: [kassaId], references: [id])
-  currency     Currency              @relation(fields: [currencyId], references: [id])
+  organization Organization          @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
+  user         User?                 @relation(fields: [userId], references: [id]) /* Связь с пользователем, проводившим платёж */
+  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id]) /* Связь с клиентом или поставщиком */
+  kassa        Kassa                 @relation(fields: [kassaId], references: [id]) /* Касса, из которой или в которую проведён платёж */
+  currency     Currency              @relation(fields: [currencyId], references: [id]) /* Валюта, в которой произведён платёж */
 
-  purchase Purchase? @relation("PurchasePayments", fields: [purchaseId], references: [id])
-  sale     Sale?     @relation("SalePayments", fields: [saleId], references: [id])
+  purchase Purchase? @relation("PurchasePayments", fields: [purchaseId], references: [id]) /* Ссылка на покупку, если есть */
+  sale     Sale?     @relation("SalePayments", fields: [saleId], references: [id]) /* Ссылка на продажу, если есть */
 
-  createdAt            DateTime             @default(now()) @map("created_at")
-  installment_payments InstallmentPayment[]
+  createdAt            DateTime             @default(now()) @map("created_at") /* Дата и время создания записи о платеже */
+  installment_payments InstallmentPayment[] /* Массив записей, если платёж разбит на части (рассрочка) */
 
-  @@map("payments")
+  @@map("payments") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель Transaction отражает движение средств между организацией и клиентом.
+ * Каждая запись фиксирует дебет, кредит и текущий баланс после операции.
+ * Используется для истории взаиморасчётов по продажам, покупкам, оплатам и т.д.
+ */
 model Transaction {
-  id             String      @id @default(uuid())
-  organizationId String      @map("organization_id")
-  customerId     String      @map("customer_id")
-  relatedType    RelatedType @map("related_type")
-  relatedId      String      @map("related_id") // SaleId, PurchesId......
-  date           DateTime    @default(now())
-  debit          Decimal     @default(0)
-  credit         Decimal     @default(0)
-  balanceAfter   Decimal     @map("balance_after")
-  currencyId     String      @map("currency_id")
-  description    String?
+  id             String      @id @default(uuid()) /* Уникальный идентификатор транзакции, пример: "a67d2c55-3e20-48df-9008-5b7f9b89a991" */
+  organizationId String      @map("organization_id") /* ID организации, к которой относится транзакция */
+  customerId     String      @map("customer_id") /* ID клиента или контрагента, связанного с транзакцией */
+  relatedType    RelatedType @map("related_type") /* Тип связанной операции, пример: SALE, PURCHASE, PAYMENT и т.д. */
+  relatedId      String      @map("related_id") /* ID связанной записи (например, продажи, покупки или платежа) */
+  date           DateTime    @default(now()) /* Дата и время создания транзакции */
+  debit          Decimal     @default(0) /* Сумма, поступившая на счёт (дебет), пример: 200000.00 */
+  credit         Decimal     @default(0) /* Сумма, списанная со счёта (кредит), пример: 150000.00 */
+  balanceAfter   Decimal     @map("balance_after") /* Баланс клиента после транзакции, пример: 50000.00 */
+  currencyId     String      @map("currency_id") /* ID валюты, в которой совершена операция */
+  description    String? /* Необязательное описание транзакции, пример: "Оплата по счёту №1234" */
 
-  organization Organization         @relation(fields: [organizationId], references: [id])
-  customer     OrganizationCustomer @relation(fields: [customerId], references: [id])
-  currency     Currency             @relation(fields: [currencyId], references: [id])
+  organization Organization         @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
+  customer     OrganizationCustomer @relation(fields: [customerId], references: [id]) /* Связь с клиентом или контрагентом */
+  currency     Currency             @relation(fields: [currencyId], references: [id]) /* Валюта транзакции */
 
-  @@map("transactions")
+  @@map("transactions") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель Sale описывает продажу товаров или услуг клиенту.
+ * Содержит информацию о суммах, кассе, ответственных лицах и связанных оплатах.
+ * Используется для учёта выручки, долга клиента и генерации счетов-фактур.
+ */
 model Sale {
-  id             String     @id @default(uuid())
-  organizationId String     @map("organization_id")
-  customerId     String     @map("customer_id")
-  responsibleId  String     @map("responsible_id")
-  kassaId        String?    @map("kassa_id")
-  invoiceNumber  String     @map("invoice_number")
-  saleDate       DateTime   @default(now()) @map("sale_date")
-  totalAmount    Decimal    @map("total_amount")
-  paidAmount     Decimal    @default(0.00) @map("paid_amount")
-  currencyId     String     @map("currency_id")
-  status         SaleStatus @default(DRAFT)
-  notes          String?
+  id             String     @id @default(uuid()) /* Уникальный идентификатор продажи, пример: "8d5a2f7b-91e3-4e1b-9c65-ef8c9c1b6a91" */
+  organizationId String     @map("organization_id") /* ID организации, которая выполнила продажу */
+  customerId     String     @map("customer_id") /* ID клиента, которому продан товар */
+  responsibleId  String     @map("responsible_id") /* ID пользователя, ответственного за продажу (менеджер, кассир и т.д.) */
+  kassaId        String?    @map("kassa_id") /* ID кассы, из которой была произведена оплата (если применимо) */
+  invoiceNumber  String     @map("invoice_number") /* Номер счёта или накладной, пример: "INV-2025-00123" */
+  saleDate       DateTime   @default(now()) @map("sale_date") /* Дата и время продажи */
+  totalAmount    Decimal    @map("total_amount") /* Общая сумма продажи, пример: 1250000.00 */
+  paidAmount     Decimal    @default(0.00) @map("paid_amount") /* Оплаченная сумма, пример: 750000.00 */
+  currencyId     String     @map("currency_id") /* Валюта, в которой проведена продажа */
+  status         SaleStatus @default(DRAFT) /* Статус продажи — DRAFT, COMPLETED, CANCELED и т.д. */
+  notes          String? /* Примечание к продаже, пример: "Скидка постоянному клиенту" */
 
-  organization Organization         @relation(fields: [organizationId], references: [id])
-  customer     OrganizationCustomer @relation(fields: [customerId], references: [id])
-  responsible  User                 @relation(fields: [responsibleId], references: [id])
-  currency     Currency             @relation(fields: [currencyId], references: [id])
-  kassa        Kassa?               @relation(fields: [kassaId], references: [id])
-  items        SaleItem[]
-  payments     Payment[]            @relation("SalePayments")
+  organization Organization         @relation(fields: [organizationId], references: [id]) /* Связь с организацией, где проведена продажа */
+  customer     OrganizationCustomer @relation(fields: [customerId], references: [id]) /* Клиент, которому продан товар */
+  responsible  User                 @relation(fields: [responsibleId], references: [id]) /* Пользователь, оформивший продажу */
+  currency     Currency             @relation(fields: [currencyId], references: [id]) /* Валюта продажи */
+  kassa        Kassa?               @relation(fields: [kassaId], references: [id]) /* Касса, через которую прошла оплата */
+  items        SaleItem[] /* Список проданных товаров */
+  payments     Payment[]            @relation("SalePayments") /* Платежи, связанные с этой продажей */
 
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  installments Installment[]
-  documents    Document[]
+  createdAt    DateTime      @default(now()) @map("created_at") /* Дата создания записи */
+  updatedAt    DateTime      @updatedAt @map("updated_at") /* Дата последнего обновления */
+  installments Installment[] /* Рассрочки, оформленные по этой продаже */
+  documents    Document[] /* Документы (чеки, договоры, счета-фактуры и т.п.) */
 
-  @@map("sales")
+  @@map("sales") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель SaleItem описывает отдельную позицию (товар или услугу) в составе продажи.
+ * Каждая запись представляет один проданный продукт с количеством, ценой и валютой.
+ * Используется для детализации продаж и расчёта итоговых сумм.
+ */
 model SaleItem {
-  id         String  @id @default(uuid())
-  saleId     String  @map("sale_id")
-  productId  String  @map("product_id")
-  quantity   Int
-  price      Decimal
-  total      Decimal
-  currencyId String  @map("currency_id")
+  id         String  @id @default(uuid()) /* Уникальный идентификатор позиции продажи, пример: "c71b90e2-2b15-45df-a318-ecb34a62a923" */
+  saleId     String  @map("sale_id") /* ID продажи, к которой относится эта позиция */
+  productId  String  @map("product_id") /* ID проданного товара */
+  quantity   Int /* Количество проданных единиц товара, пример: 3 */
+  price      Decimal /* Цена за единицу товара, пример: 250000.00 */
+  total      Decimal /* Общая сумма по этой позиции = quantity × price, пример: 750000.00 */
+  currencyId String  @map("currency_id") /* Валюта, в которой указана цена и сумма, пример: "UZS" */
 
-  sale     Sale     @relation(fields: [saleId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
-  currency Currency @relation(fields: [currencyId], references: [id])
+  sale     Sale     @relation(fields: [saleId], references: [id]) /* Связь с продажей, которой принадлежит товар */
+  product  Product  @relation(fields: [productId], references: [id]) /* Связь с проданным товаром */
+  currency Currency @relation(fields: [currencyId], references: [id]) /* Валюта, используемая в продаже */
+
+  @@map("sale_items") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель Purchase описывает закупку товаров у поставщиков.
+ * Она хранит данные о поставщике, организации, ответственном лице, оплатах,
+ * общей сумме, статусе закупки и связанных позициях товаров.
+ * Используется для учёта закупок и контроля финансовых операций.
+ */
 model Purchase {
-  id             String         @id @default(uuid())
-  organizationId String         @map("organization_id")
-  supplierId     String         @map("supplier_id")
-  responsibleId  String         @map("responsible_id")
-  kassaId        String?        @map("kassa_id")
-  invoiceNumber  String?        @map("invoice_number")
-  purchaseDate   DateTime       @default(now()) @map("purchase_date")
-  totalAmount    Decimal        @map("total_amount")
-  paidAmount     Decimal        @default(0.00) @map("paid_amount")
-  currencyId     String         @map("currency_id")
-  status         PurchaseStatus @default(DRAFT)
-  notes          String?
+  id             String         @id @default(uuid()) /* Уникальный идентификатор закупки, пример: "f6e5b1a2-45cd-4e99-b9a4-92c23d91a4a5" */
+  organizationId String         @map("organization_id") /* ID организации, которая выполняет закупку */
+  supplierId     String         @map("supplier_id") /* ID поставщика, у которого совершается покупка */
+  responsibleId  String         @map("responsible_id") /* ID пользователя, ответственного за закупку */
+  kassaId        String?        @map("kassa_id") /* ID кассы, из которой производится оплата (опционально) */
+  invoiceNumber  String?        @map("invoice_number") /* Номер накладной или счета, пример: "INV-2025-0023" */
+  purchaseDate   DateTime       @default(now()) @map("purchase_date") /* Дата и время закупки, пример: "2025-10-12T14:45:00Z" */
+  totalAmount    Decimal        @map("total_amount") /* Общая сумма закупки, пример: 1250000.00 */
+  paidAmount     Decimal        @default(0.00) @map("paid_amount") /* Оплаченная сумма на данный момент, пример: 500000.00 */
+  currencyId     String         @map("currency_id") /* Валюта закупки, пример: "USD" */
+  status         PurchaseStatus @default(DRAFT) /* Статус закупки: DRAFT, CONFIRMED, COMPLETED и т.д. */
+  notes          String? /* Дополнительные комментарии или примечания по закупке */
 
-  organization Organization         @relation(fields: [organizationId], references: [id])
-  supplier     OrganizationCustomer @relation(fields: [supplierId], references: [id])
-  responsible  User                 @relation(fields: [responsibleId], references: [id])
-  currency     Currency             @relation(fields: [currencyId], references: [id])
-  kassa        Kassa?               @relation(fields: [kassaId], references: [id])
-  items        PurchaseItem[]
-  payments     Payment[]            @relation("PurchasePayments")
+  organization Organization         @relation(fields: [organizationId], references: [id]) /* Связь с организацией, которая совершила закупку */
+  supplier     OrganizationCustomer @relation(fields: [supplierId], references: [id]) /* Связь с поставщиком */
+  responsible  User                 @relation(fields: [responsibleId], references: [id]) /* Ответственное лицо (пользователь) */
+  currency     Currency             @relation(fields: [currencyId], references: [id]) /* Валюта, в которой оформлена закупка */
+  kassa        Kassa?               @relation(fields: [kassaId], references: [id]) /* Касса, из которой произведена оплата */
+  items        PurchaseItem[] /* Список товаров, входящих в закупку */
+  payments     Payment[]            @relation("PurchasePayments") /* Связанные оплаты по закупке */
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи о закупке */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
-  @@map("purchases")
+  @@map("purchases") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель PurchaseItem описывает отдельную позицию товара в рамках закупки.
+ * Каждая запись хранит информацию о конкретном товаре, количестве, цене, скидке и итоговой сумме.
+ * Используется для детализации закупок и расчёта общей стоимости.
+ */
 model PurchaseItem {
-  id         String  @id @default(uuid())
-  purchaseId String  @map("purchase_id")
-  productId  String  @map("product_id")
-  quantity   Int
-  price      Decimal
-  discount   Decimal @default(0.00) // 💡 скидка (на случай акций)
-  total      Decimal
+  id         String  @id @default(uuid()) /* Уникальный идентификатор позиции закупки, пример: "c71b90e2-2b15-45df-a318-ecb34a62a923" */
+  purchaseId String  @map("purchase_id") /* ID закупки, к которой относится эта позиция */
+  productId  String  @map("product_id") /* ID товара, который закуплен */
+  quantity   Int /* Количество единиц товара, пример: 10 */
+  price      Decimal /* Цена за единицу товара, пример: 12000.50 */
+  discount   Decimal @default(0.00) /* Скидка на единицу товара, пример: 500.00 */
+  total      Decimal /* Итоговая сумма по позиции = (price - discount) * quantity, пример: 115000.00 */
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
+  purchase Purchase @relation(fields: [purchaseId], references: [id]) /* Связь с закупкой */
+  product  Product  @relation(fields: [productId], references: [id]) /* Связь с закупленным товаром */
+
+  @@map("purchase_items") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель Installment хранит информацию о рассрочках по продажам.
+ * Она учитывает общую сумму, первоначальный взнос, уже оплаченные суммы, остаток, срок и ежемесячные платежи.
+ * Используется для отслеживания долгов клиентов и управления платежами по рассрочке.
+ */
 model Installment {
-  id             String            @id @default(uuid())
-  saleId         String            @map("sale_id")
-  customerId     String            @map("customer_id")
-  totalAmount    Decimal           @default(0) @map("total_amount") // общая сумма (например, $1000)
-  initialPayment Decimal           @default(0) @map("initial_payment") // первоначальный взнос (например, $200)
-  paidAmount     Decimal           @default(0) @map("paid_amount") // сколько уже оплачено
-  remaining      Decimal           @default(0) // остаток
-  totalMonths    Int               @default(0) @map("total_months") // изначально указанный срок (например, 8 месяцев)
-  monthsLeft     Int               @default(0) @map("months_left") // оставшийся срок (пересчитывается)
-  monthlyPayment Decimal           @default(0) @map("monthly_payment") // расчетный ежемесячный платёж
-  dueDate        DateTime          @map("due_date") // крайний срок погашения
-  status         InstallmentStatus @default(PENDING)
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
+  id             String            @id @default(uuid()) /* Уникальный идентификатор рассрочки, пример: "b1c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e" */
+  saleId         String            @map("sale_id") /* ID продажи, к которой относится рассрочка */
+  customerId     String            @map("customer_id") /* ID клиента, которому предоставлена рассрочка */
+  totalAmount    Decimal           @default(0) @map("total_amount") /* Общая сумма рассрочки, пример: 1000.00 */
+  initialPayment Decimal           @default(0) @map("initial_payment") /* Первоначальный взнос, пример: 200.00 */
+  paidAmount     Decimal           @default(0) @map("paid_amount") /* Сумма, уже оплаченная клиентом, пример: 300.00 */
+  remaining      Decimal           @default(0) /* Остаток к оплате, пример: 700.00 */
+  totalMonths    Int               @default(0) @map("total_months") /* Изначально установленный срок рассрочки в месяцах, пример: 8 */
+  monthsLeft     Int               @default(0) @map("months_left") /* Оставшийся срок в месяцах, пересчитывается при оплатах, пример: 5 */
+  monthlyPayment Decimal           @default(0) @map("monthly_payment") /* Расчетный ежемесячный платеж, пример: 125.00 */
+  dueDate        DateTime          @map("due_date") /* Крайний срок погашения рассрочки, пример: "2025-12-31T23:59:59Z" */
+  status         InstallmentStatus @default(PENDING) /* Статус рассрочки: PENDING, PAID, OVERDUE */
 
-  // relations
-  sale     Sale                 @relation(fields: [saleId], references: [id])
-  customer OrganizationCustomer @relation(fields: [customerId], references: [id])
-  payments InstallmentPayment[]
+  createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
-  @@map("installments")
+  /**
+   * relations
+   */
+  sale     Sale                 @relation(fields: [saleId], references: [id]) /* Связь с продажей */
+  customer OrganizationCustomer @relation(fields: [customerId], references: [id]) /* Связь с клиентом */
+  payments InstallmentPayment[] /* Платежи, внесенные по этой рассрочке */
+
+  @@map("installments") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель InstallmentPayment хранит информацию о каждом платеже по рассрочке.
+ * Каждая запись отражает конкретный платеж, дату, сумму, способ оплаты и комментарий.
+ * Используется для контроля и учёта внесённых платежей по рассрочкам.
+ */
 model InstallmentPayment {
-  id            String   @id @default(uuid())
-  installmentId String   @map("installment_id")
-  amount        Decimal // сумма платежа (например, $200)
-  paidAt        DateTime @default(now()) @map("paid_at")
-  paymentMethod String?  @map("payment_method") // например: "cash", "click", "transfer"
-  note          String? // комментарий: "за ноябрь", "досрочная оплата"
-  createdById   String?  @map("created_by_id")
+  id            String   @id @default(uuid()) /* Уникальный идентификатор платежа по рассрочке, пример: "d2f3e4b5-6c7a-4d8e-9f0b-1a2b3c4d5e6f" */
+  installmentId String   @map("installment_id") /* ID рассрочки, к которой относится платеж */
+  amount        Decimal /* Сумма платежа, пример: 200.00 */
+  paidAt        DateTime @default(now()) @map("paid_at") /* Дата и время платежа, пример: "2025-11-02T12:00:00Z" */
+  paymentMethod String?  @map("payment_method") /* Метод оплаты: cash, click, transfer и т.д., пример: "cash" */
+  note          String? /* Комментарий к платежу, пример: "за ноябрь" */
+  createdById   String?  @map("created_by_id") /* ID пользователя, создавшего запись о платеже */
 
-  installment Installment @relation(fields: [installmentId], references: [id])
-  created_by  User?       @relation(fields: [createdById], references: [id])
-  payment     Payment?    @relation(fields: [paymentId], references: [id])
-  paymentId   String?     @map("payment_id")
+  installment Installment @relation(fields: [installmentId], references: [id]) /* Связь с рассрочкой */
+  created_by  User?       @relation(fields: [createdById], references: [id]) /* Связь с пользователем, который зарегистрировал платёж */
+  payment     Payment?    @relation(fields: [paymentId], references: [id]) /* Связь с основной записью платежа, если есть */
+  paymentId   String?     @map("payment_id") /* ID платежа */
 
-  @@map("installment_payments")
+  @@map("installment_payments") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель Document хранит документы, связанные с организацией, клиентом или продажей.
+ * Используется для прикрепления файлов, таких как счета, акты, договоры и прочее.
+ */
 model Document {
-  id             String       @id @default(uuid())
-  organizationId String       @map("organization_id")
-  customerId     String?      @map("customer_id")
-  saleId         String?      @map("sale_id")
-  type           DocumentType
-  fileUrl        String       @map("file_url")
-  uploadedById   String?      @map("uploaded_by")
-  uploadedBy     User?        @relation(fields: [uploadedById], references: [id])
-  createdAt      DateTime     @default(now()) @map("created_at")
+  id             String       @id @default(uuid()) /* Уникальный идентификатор документа, пример: "e3f4a5b6-7c8d-4e9f-a0b1-2c3d4e5f6a7b" */
+  organizationId String       @map("organization_id") /* ID организации, к которой относится документ */
+  customerId     String?      @map("customer_id") /* ID клиента, если документ связан с клиентом */
+  saleId         String?      @map("sale_id") /* ID продажи, если документ прикреплён к продаже */
+  type           DocumentType /* Тип документа, пример: INVOICE, CONTRACT */
+  fileUrl        String       @map("file_url") /* Ссылка на файл документа, пример: "https://example.com/invoice_001.pdf" */
+  uploadedById   String?      @map("uploaded_by") /* ID пользователя, загрузившего документ */
+  uploadedBy     User?        @relation(fields: [uploadedById], references: [id]) /* Связь с пользователем, загрузившим файл */
+  createdAt      DateTime     @default(now()) @map("created_at") /* Дата загрузки документа */
 
-  organization Organization          @relation(fields: [organizationId], references: [id])
-  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id])
-  sale         Sale?                 @relation(fields: [saleId], references: [id])
+  organization Organization          @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
+  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id]) /* Связь с клиентом, если есть */
+  sale         Sale?                 @relation(fields: [saleId], references: [id]) /* Связь с продажей, если есть */
 
-  @@map("documents")
+  @@map("documents") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель Settings хранит настройки организации.
+ * Используется для управления валютой, языком, форматом даты, включением рассрочек, уведомлений, логотипом и темой.
+ */
+model Settings {
+  id                   String    @id @default(uuid()) /* Уникальный идентификатор настроек, пример: "f1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c" */
+  organizationId       String    @unique @map("organization_id") /* ID организации, для которой применяются настройки */
+  baseCurrencyId       String    @map("base_currency_id") /* ID базовой валюты организации */
+  language             String?   @default("ru") /* Язык интерфейса, пример: "ru" или "en" */
+  dateFormat           String?   @default("DD.MM.YYYY") /* Формат отображения даты */
+  enableInstallment    Boolean   @default(true) /* Включена ли возможность рассрочки при продаже */
+  enableNotifications  Boolean   @default(true) /* Включение уведомлений клиентам или пользователям */
+  enableAutoRateUpdate Boolean   @default(false) /* Разрешить автоматическое обновление курсов валют */
+  taxPercent           Decimal?  @default(0) /* Общий налог, например НДС, пример: 15.0 */
+  logoUrl              String? /* Ссылка на логотип организации */
+  theme                ThemeType @default(LIGHT) /* Тема интерфейса, пример: LIGHT или DARK */
+
+  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
+  baseCurrency Currency     @relation(fields: [baseCurrencyId], references: [id]) /* Связь с базовой валютой */
+
+  createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
+
+  @@map("settings") /* Название таблицы в базе данных */
+}
+
+/**
+ * Модель AuditLog хранит историю действий пользователей в системе.
+ * Используется для аудита и отслеживания изменений данных.
+ */
+model AuditLog {
+  id             String   @id @default(uuid()) /* Уникальный идентификатор записи аудита, пример: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d" */
+  organizationId String   @map("organization_id") /* ID организации, где произошло действие */
+  userId         String?  @map("user_id") /* ID пользователя, который совершил действие, если известно */
+  action         String /* Описание действия, пример: "CREATE", "UPDATE", "DELETE" */
+  entity         String /* Название сущности, к которой относится действие, пример: "Product", "Sale" */
+  entityId       String?  @map("entity_id") /* ID сущности, к которой относится действие */
+  oldValue       Json?    @map("old_value") /* Старое значение объекта перед изменением */
+  newValue       Json?    @map("new_value") /* Новое значение объекта после изменения */
+  createdAt      DateTime @default(now()) @map("created_at") /* Дата и время создания записи аудита */
+
+  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
+  user         User?        @relation(fields: [userId], references: [id]) /* Связь с пользователем, если есть */
+
+  @@map("audit_logs") /* Название таблицы в базе данных */
+}
+
+/**
+ * Enum DocumentType определяет типы документов в системе.
+ */
 enum DocumentType {
-  PASSPORT
-  CONTRACT
-  PAYMENT_RECEIPT
-  OTHER
+  PASSPORT /* Паспорт клиента */
+  CONTRACT /* Договор или контракт */
+  PAYMENT_RECEIPT /* Квитанция об оплате */
+  OTHER /* Другие типы документов */
 }
 
 enum InstallmentStatus {
@@ -549,54 +766,6 @@ enum InstallmentStatus {
   COMPLETED // всё выплачено
   OVERDUE // просрочена
   CANCELLED // отменена
-}
-
-model Settings {
-  id                   String    @id @default(uuid())
-  organizationId       String    @unique @map("organization_id")
-  baseCurrencyId       String    @map("base_currency_id")
-  language             String?   @default("ru")
-  dateFormat           String?   @default("DD.MM.YYYY")
-  enableInstallment    Boolean   @default(true) //Включить ли возможность рассрочки при продаже.
-  enableNotifications  Boolean   @default(true) //Уведомления клиентам или пользователям.
-  enableAutoRateUpdate Boolean   @default(false) //Разрешить автоматическое обновление курсов валют.
-  taxPercent           Decimal?  @default(0) //Общий налог (например, НДС).
-  logoUrl              String?
-  theme                ThemeType @default(LIGHT)
-
-  organization Organization @relation(fields: [organizationId], references: [id])
-  baseCurrency Currency     @relation(fields: [baseCurrencyId], references: [id])
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("settings")
-}
-
-model Role {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  description String?
-  users       User[]
-
-  @@map("roles")
-}
-
-model AuditLog {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  userId         String?  @map("user_id")
-  action         String
-  entity         String
-  entityId       String?  @map("entity_id")
-  oldValue       Json?    @map("old_value")
-  newValue       Json?    @map("new_value")
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id])
-  user         User?        @relation(fields: [userId], references: [id])
-
-  @@map("audit_logs")
 }
 
 enum ThemeType {

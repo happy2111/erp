@@ -1,5 +1,7 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Res } from '@nestjs/common';
 import { AppService } from './app.service';
+import type { Response } from 'express';
+import { join } from 'path';
 
 @Controller()
 export class AppController {
@@ -8,5 +10,11 @@ export class AppController {
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  // Serve the generated Prisma docs HTML
+  @Get('schema/doc')
+  async getHtml(@Res() res: Response) {
+    return res.sendFile(join(process.cwd(), 'docs', 'index.html'));
   }
 }
