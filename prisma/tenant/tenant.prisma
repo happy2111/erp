@@ -22,9 +22,20 @@ model Currency {
   transactions   Transaction[]
   sales          Sale[]
   sale_items     SaleItem[]
-  Purchase       Purchase[]
+  purchases      Purchase[]
+  from_transfers KassaTransfer[] @relation("FromCurrencyRelation")
+  to_transfers   KassaTransfer[] @relation("ToCurrencyRelation")
+  settings       Settings[]
 
   @@map("currencies")
+}
+
+model CurrencyRate {
+  id             String   @id @default(uuid())
+  baseCurrency   String
+  targetCurrency String
+  rate           Decimal
+  date           DateTime @default(now())
 }
 
 model Organization {
@@ -46,25 +57,35 @@ model Organization {
   payments          Payment[]
   transactions      Transaction[]
   sales             Sale[]
-  Purchase          Purchase[]
+  purchases         Purchase[]
+  stocks            Stock[]
+  kassa_transfers   KassaTransfer[]
+  settings          Settings?
+  audit_logs        AuditLog[]
+  documents         Document[]
 
   @@map("organizations")
 }
 
 model User {
-  id            String                 @id @default(uuid())
-  phone_numbers UserPhone[]
-  email         String?                @unique
-  password      String
-  isActive      Boolean                @default(true) @map("is_active")
-  profile       UserProfile?
-  org_links     OrganizationUser[]
-  cutomer_links OrganizationCustomer[]
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
-  payments      Payment[]
-  sales         Sale[]
-  Purchase      Purchase[]
+  id                   String                 @id @default(uuid())
+  email                String?                @unique
+  password             String
+  isActive             Boolean                @default(true) @map("is_active")
+  profile              UserProfile?
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  role                 Role?                  @relation(fields: [roleId], references: [id])
+  roleId               String?
+  org_links            OrganizationUser[]
+  cutomer_links        OrganizationCustomer[]
+  payments             Payment[]
+  sales                Sale[]
+  purchases            Purchase[]
+  phone_numbers        UserPhone[]
+  audit_logs           AuditLog[]
+  documents            Document[]
+  installment_payments InstallmentPayment[]
 
   @@map("users")
 }
@@ -87,6 +108,7 @@ model UserProfile {
   city           String?
   address        String?
   registration   String?
+  district       String?   @map("district") // <--- добавляем сюда hudud
   user           User      @relation(fields: [userId], references: [id])
 
   @@map("user_profiles")
@@ -127,13 +149,16 @@ model OrganizationCustomer {
   name              String
   phone             String
   type              CustomerType
+  isBlacklisted     Boolean           @default(false) @map("is_blacklisted")
   organization      Organization      @relation(fields: [organizationId], references: [id])
   user              User?             @relation(fields: [userId], references: [id])
   product_instances ProductInstance[] @relation("CustomerProductInstances")
   payments          Payment[]
   transactions      Transaction[]
   sales             Sale[]
-  Purchase          Purchase[]
+  purchases         Purchase[]
+  installments      Installment[]
+  documents         Document[]
 
   @@map("organization_customers")
 }
@@ -165,10 +190,12 @@ model Product {
   prices       ProductPrice[]
   instances    ProductInstance[]
 
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  sele_items     SaleItem[]
-  purchase_items PurchaseItem[]
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  sele_items      SaleItem[]
+  purchase_items  PurchaseItem[]
+  stocks          Stock[]
+  product_batches ProductBatch[]
 
   @@map("products")
 }
@@ -205,7 +232,7 @@ model ProductPrice {
   currency       Currency      @relation(fields: [currencyId], references: [id])
   product        Product       @relation(fields: [productId], references: [id])
   organization   Organization? @relation(fields: [organizationId], references: [id])
-  customerType   CustomerType? // CLIENT, SUPPLIER и т.д.
+  customerType   CustomerType? @map("customer_type") // CLIENT, SUPPLIER и т.д.
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 }
@@ -215,7 +242,7 @@ model ProductInstance {
   productId      String        @map("product_id")
   serialNumber   String        @unique @map("serial_number")
   currentOwnerId String?       @map("current_owner_id")
-  currentStatus  ProductStatus @default(IN_STOCK)
+  currentStatus  ProductStatus @default(IN_STOCK) @map("current_status")
   organizationId String        @map("organization_id")
 
   product       Product               @relation(fields: [productId], references: [id])
@@ -234,6 +261,7 @@ model ProductTransaction {
   productInstanceId String        @map("product_instance_id")
   fromCustomerId    String?       @map("from_customer_id")
   toCustomerId      String?       @map("to_customer_id")
+  toOrganizationId  String?       @map("to_organization_id")
   saleId            String?       @map("sale_id") // связь с продажей, если нужно
   action            ProductAction
   date              DateTime      @default(now())
@@ -242,6 +270,30 @@ model ProductTransaction {
   product_instance ProductInstance @relation(fields: [productInstanceId], references: [id])
 
   @@map("product_transactions")
+}
+
+model ProductBatch {
+  id          String    @id @default(uuid())
+  productId   String    @map("product_id")
+  batchNumber String    @map("batch_number")
+  expiryDate  DateTime? @map("expiry_date")
+  quantity    Int
+  isValid     Boolean   @default(true) @map("is_valid")
+
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model Stock {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  productId      String   @map("product_id")
+  quantity       Int      @default(0)
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  product      Product      @relation(fields: [productId], references: [id])
+
+  @@map("stocks")
 }
 
 model Kassa {
@@ -256,12 +308,39 @@ model Kassa {
   currency     Currency     @relation(fields: [currencyId], references: [id])
   payments     Payment[]
 
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
-  purchases Purchase[]
-  sales     Sale[]
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  purchases          Purchase[]
+  sales              Sale[]
+  outgoing_transfers KassaTransfer[] @relation("FromKassaRelation")
+  incoming_transfers KassaTransfer[] @relation("ToKassaRelation")
 
   @@map("kassas")
+}
+
+model KassaTransfer {
+  id              String   @id @default(uuid())
+  organizationId  String   @map("organization_id")
+  fromKassaId     String   @map("from_kassa_id")
+  toKassaId       String   @map("to_kassa_id")
+  fromCurrencyId  String   @map("from_currency_id")
+  toCurrencyId    String   @map("to_currency_id")
+  rate            Decimal  @default(1) // курс, например 1 USD = 12500 UZS 
+  amount          Decimal // сумма в валюте источника
+  convertedAmount Decimal  @map("converted_amount") // сумма после пересчёта в валюту назначения
+  description     String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // 🟢 Здесь мы указываем relation name, потому что Kassa участвует дважды
+  from_kassa   Kassa        @relation("FromKassaRelation", fields: [fromKassaId], references: [id])
+  to_kassa     Kassa        @relation("ToKassaRelation", fields: [toKassaId], references: [id])
+
+  // 🟢 То же самое для Currency
+  from_currency Currency @relation("FromCurrencyRelation", fields: [fromCurrencyId], references: [id])
+  to_currency   Currency @relation("ToCurrencyRelation", fields: [toCurrencyId], references: [id])
+
+  @@map("kassa_transfers")
 }
 
 model Payment {
@@ -288,7 +367,8 @@ model Payment {
   purchase Purchase? @relation("PurchasePayments", fields: [purchaseId], references: [id])
   sale     Sale?     @relation("SalePayments", fields: [saleId], references: [id])
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  installment_payments InstallmentPayment[]
 
   @@map("payments")
 }
@@ -297,12 +377,12 @@ model Transaction {
   id             String      @id @default(uuid())
   organizationId String      @map("organization_id")
   customerId     String      @map("customer_id")
-  relatedType    RelatedType
-  relatedId      String // SaleId, PurchesId......
+  relatedType    RelatedType @map("related_type")
+  relatedId      String      @map("related_id") // SaleId, PurchesId......
   date           DateTime    @default(now())
   debit          Decimal     @default(0)
   credit         Decimal     @default(0)
-  balanceAfter   Decimal
+  balanceAfter   Decimal     @map("balance_after")
   currencyId     String      @map("currency_id")
   description    String?
 
@@ -335,8 +415,10 @@ model Sale {
   items        SaleItem[]
   payments     Payment[]            @relation("SalePayments")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  installments Installment[]
+  documents    Document[]
 
   @@map("sales")
 }
@@ -361,10 +443,10 @@ model Purchase {
   supplierId     String         @map("supplier_id")
   responsibleId  String         @map("responsible_id")
   kassaId        String?        @map("kassa_id")
-  invoiceNumber  String?
-  purchaseDate   DateTime       @default(now())
-  totalAmount    Decimal
-  paidAmount     Decimal        @default(0.00)
+  invoiceNumber  String?        @map("invoice_number")
+  purchaseDate   DateTime       @default(now()) @map("purchase_date")
+  totalAmount    Decimal        @map("total_amount")
+  paidAmount     Decimal        @default(0.00) @map("paid_amount")
   currencyId     String         @map("currency_id")
   status         PurchaseStatus @default(DRAFT)
   notes          String?
@@ -394,6 +476,133 @@ model PurchaseItem {
 
   purchase Purchase @relation(fields: [purchaseId], references: [id])
   product  Product  @relation(fields: [productId], references: [id])
+}
+
+model Installment {
+  id             String            @id @default(uuid())
+  saleId         String            @map("sale_id")
+  customerId     String            @map("customer_id")
+  totalAmount    Decimal           @default(0) @map("total_amount") // общая сумма (например, $1000)
+  initialPayment Decimal           @default(0) @map("initial_payment") // первоначальный взнос (например, $200)
+  paidAmount     Decimal           @default(0) @map("paid_amount") // сколько уже оплачено
+  remaining      Decimal           @default(0) // остаток
+  totalMonths    Int               @default(0) @map("total_months") // изначально указанный срок (например, 8 месяцев)
+  monthsLeft     Int               @default(0) @map("months_left") // оставшийся срок (пересчитывается)
+  monthlyPayment Decimal           @default(0) @map("monthly_payment") // расчетный ежемесячный платёж
+  dueDate        DateTime          @map("due_date") // крайний срок погашения
+  status         InstallmentStatus @default(PENDING)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  // relations
+  sale     Sale                 @relation(fields: [saleId], references: [id])
+  customer OrganizationCustomer @relation(fields: [customerId], references: [id])
+  payments InstallmentPayment[]
+
+  @@map("installments")
+}
+
+model InstallmentPayment {
+  id            String   @id @default(uuid())
+  installmentId String   @map("installment_id")
+  amount        Decimal // сумма платежа (например, $200)
+  paidAt        DateTime @default(now()) @map("paid_at")
+  paymentMethod String?  @map("payment_method") // например: "cash", "click", "transfer"
+  note          String? // комментарий: "за ноябрь", "досрочная оплата"
+  createdById   String?  @map("created_by_id")
+
+  installment Installment @relation(fields: [installmentId], references: [id])
+  created_by  User?       @relation(fields: [createdById], references: [id])
+  payment     Payment?    @relation(fields: [paymentId], references: [id])
+  paymentId   String?     @map("payment_id")
+
+  @@map("installment_payments")
+}
+
+model Document {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  customerId     String?      @map("customer_id")
+  saleId         String?      @map("sale_id")
+  type           DocumentType
+  fileUrl        String       @map("file_url")
+  uploadedById   String?      @map("uploaded_by")
+  uploadedBy     User?        @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  organization Organization          @relation(fields: [organizationId], references: [id])
+  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id])
+  sale         Sale?                 @relation(fields: [saleId], references: [id])
+
+  @@map("documents")
+}
+
+enum DocumentType {
+  PASSPORT
+  CONTRACT
+  PAYMENT_RECEIPT
+  OTHER
+}
+
+enum InstallmentStatus {
+  PENDING // рассрочка активна
+  COMPLETED // всё выплачено
+  OVERDUE // просрочена
+  CANCELLED // отменена
+}
+
+model Settings {
+  id                   String    @id @default(uuid())
+  organizationId       String    @unique @map("organization_id")
+  baseCurrencyId       String    @map("base_currency_id")
+  language             String?   @default("ru")
+  dateFormat           String?   @default("DD.MM.YYYY")
+  enableInstallment    Boolean   @default(true) //Включить ли возможность рассрочки при продаже.
+  enableNotifications  Boolean   @default(true) //Уведомления клиентам или пользователям.
+  enableAutoRateUpdate Boolean   @default(false) //Разрешить автоматическое обновление курсов валют.
+  taxPercent           Decimal?  @default(0) //Общий налог (например, НДС).
+  logoUrl              String?
+  theme                ThemeType @default(LIGHT)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  baseCurrency Currency     @relation(fields: [baseCurrencyId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  users       User[]
+
+  @@map("roles")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  userId         String?  @map("user_id")
+  action         String
+  entity         String
+  entityId       String?  @map("entity_id")
+  oldValue       Json?    @map("old_value")
+  newValue       Json?    @map("new_value")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+enum ThemeType {
+  LIGHT
+  DARK
+  SYSTEM
 }
 
 enum PurchaseStatus {
