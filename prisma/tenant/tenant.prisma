@@ -743,6 +743,7 @@ model AuditLog {
   entityId       String?  @map("entity_id") /* ID сущности, к которой относится действие */
   oldValue       Json?    @map("old_value") /* Старое значение объекта перед изменением */
   newValue       Json?    @map("new_value") /* Новое значение объекта после изменения */
+  note           String? /*Описание*/
   createdAt      DateTime @default(now()) @map("created_at") /* Дата и время создания записи аудита */
 
   organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
