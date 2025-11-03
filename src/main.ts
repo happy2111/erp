@@ -6,6 +6,7 @@ import { join } from 'path';
 import {TransformInterceptor} from "./interceptors/response.interceptor";
 import {AllExceptionsFilter} from "./common/filters/http-exception.filter";
 import {DocumentBuilder, SwaggerModule} from "@nestjs/swagger";
+import {type} from "node:os";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -35,7 +36,10 @@ async function bootstrap() {
     .setVersion('1.0')
     .setContact('API Support', '@hy_21', 'support@gmail.com')
     .addBearerAuth()
-    .addApiKey()
+    .addApiKey(
+      { type: 'apiKey', name: 'x-tenant-key', in: 'header' },
+      'x-tenant-key', // <-- идентификатор схемы безопасности
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
