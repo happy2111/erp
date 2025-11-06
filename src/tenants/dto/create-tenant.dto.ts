@@ -7,4 +7,7 @@ export class CreateTenantDto {
 
   @IsUUID()
   ownerId: string; // id пользователя main_db (можно потом расширить)
+
+  @IsString()
+  hostname: string;
 }

@@ -207,8 +207,8 @@ model OrganizationUser {
   role           OrgUserRole /* Роль пользователя внутри организации, пример: ADMIN, MANAGER, CASHIER */
   position       String? /* Должность или звание пользователя, пример: "Главный бухгалтер" или "Кассир" */
 
-  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с таблицей организаций */
-  user         User         @relation(fields: [userId], references: [id]) /* Связь с таблицей пользователей */
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с таблицей организаций */
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade) /* Связь с таблицей пользователей */
 
   createdAt DateTime @default(now()) @map("created_at") /* Дата добавления связи, пример: "2025-11-02T12:00:00Z" */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего изменения данных связи */
@@ -235,8 +235,8 @@ model OrganizationCustomer {
   /**
    * Связи с другими таблицами
    */
-  organization      Organization      @relation(fields: [organizationId], references: [id]) /* Организация, к которой относится клиент */
-  user              User?             @relation(fields: [userId], references: [id]) /* Пользователь, если клиент зарегистрирован в системе */
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Организация, к которой относится клиент */
+  user              User?             @relation(fields: [userId], references: [id], onDelete: SetNull) /* Пользователь, если клиент зарегистрирован в системе */
   product_instances ProductInstance[] @relation("CustomerProductInstances") /* Список экземпляров товаров, связанных с клиентом (например, проданных устройств) */
   payments          Payment[] /* Платежи, совершённые клиентом */
   transactions      Transaction[] /* Финансовые операции, связанные с клиентом */
@@ -276,7 +276,7 @@ model Product {
   barcode        String?   @unique /* Уникальный штрихкод, пример: "4789651234789" */
   brandId        String?   @map("brand_id") /* ID бренда товара, если указан */
 
-  organization    Organization      @relation(fields: [organizationId], references: [id]) /* Связь с организацией, которой принадлежит товар */
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, которой принадлежит товар */
   brand           Brand?            @relation(fields: [brandId], references: [id]) /* Связь с брендом, например "Apple" или "Samsung" */
   categories      ProductCategory[] /* Категории, к которым принадлежит товар (многие-ко-многим) */
   prices          ProductPrice[] /* Цены товара в разных валютах или магазинах */
@@ -329,7 +329,7 @@ model ProductPrice {
   currencyId     String        @map("currency_id") /* ID валюты, в которой указана цена */
   currency       Currency      @relation(fields: [currencyId], references: [id]) /* Связь с таблицей валют (Currency) */
   product        Product       @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
-  organization   Organization? @relation(fields: [organizationId], references: [id]) /* Связь с организацией, если цена специфична для неё */
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, если цена специфична для неё */
   customerType   CustomerType? @map("customer_type") /* Тип клиента, для которого установлена цена: например, CLIENT или SUPPLIER */
   createdAt      DateTime      @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
   updatedAt      DateTime      @updatedAt @map("updated_at") /* Дата последнего обновления записи */
@@ -348,9 +348,9 @@ model ProductInstance {
   currentStatus  ProductStatus @default(IN_STOCK) @map("current_status") /* Текущий статус экземпляра: например, IN_STOCK, SOLD, RETURNED */
   organizationId String        @map("organization_id") /* ID организации, которой принадлежит этот экземпляр */
 
-  product       Product               @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
-  organization  Organization          @relation("OrgProductInstances", fields: [organizationId], references: [id]) /* Связь с организацией-владельцем товара */
-  current_owner OrganizationCustomer? @relation("CustomerProductInstances", fields: [currentOwnerId], references: [id]) /* Текущий владелец товара (клиент) */
+  product       Product               @relation(fields: [productId], references: [id], onDelete: Cascade) /* Связь с таблицей товаров (Product) */
+  organization  Organization          @relation("OrgProductInstances", fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией-владельцем товара */
+  current_owner OrganizationCustomer? @relation("CustomerProductInstances", fields: [currentOwnerId], references: [id], onDelete: SetNull) /* Текущий владелец товара (клиент) */
   transactions  ProductTransaction[] /* История транзакций по этому экземпляру товара */
 
   createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
@@ -401,8 +401,8 @@ model Stock {
   productId      String       @map("product_id") /* ID товара, который хранится на складе */
   quantity       Int          @default(0) /* Текущее количество единиц товара на складе, пример: 150 */
   updatedAt      DateTime     @updatedAt @map("updated_at") /* Дата и время последнего обновления записи, пример: "2025-11-02T12:00:00Z" */
-  organization   Organization @relation(fields: [organizationId], references: [id]) /* Связь с таблицей организаций (Organization) */
-  product        Product      @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с таблицей организаций (Organization) */
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Restrict) /* Связь с таблицей товаров (Product) */
 
   @@map("stocks") /* Имя таблицы в базе данных */
 }
@@ -419,7 +419,7 @@ model Kassa {
   currencyId     String  @map("currency_id") /* Валюта кассы, ссылается на таблицу Currency */
   balance        Decimal @default(0.00) /* Текущий баланс кассы, пример: 1520000.50 */
 
-  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией-владельцем кассы */
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией-владельцем кассы */
   currency     Currency     @relation(fields: [currencyId], references: [id]) /* Связь с валютой кассы */
   payments     Payment[] /* Оплаты, проведённые через эту кассу */
 
@@ -450,12 +450,12 @@ model KassaTransfer {
   description     String? /* Описание или примечание к переводу, пример: "Перевод из кассы USD в кассу UZS" */
   createdAt       DateTime @default(now()) @map("created_at") /* Дата и время создания перевода */
 
-  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией-владельцем */
-  from_kassa   Kassa        @relation("FromKassaRelation", fields: [fromKassaId], references: [id]) /* Касса, откуда отправлены средства */
-  to_kassa     Kassa        @relation("ToKassaRelation", fields: [toKassaId], references: [id]) /* Касса, куда зачислены средства */
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией-владельцем */
+  from_kassa   Kassa        @relation("FromKassaRelation", fields: [fromKassaId], references: [id], onDelete: Cascade) /* Касса, откуда отправлены средства */
+  to_kassa     Kassa        @relation("ToKassaRelation", fields: [toKassaId], references: [id], onDelete: Cascade) /* Касса, куда зачислены средства */
 
-  from_currency Currency @relation("FromCurrencyRelation", fields: [fromCurrencyId], references: [id]) /* Валюта источника */
-  to_currency   Currency @relation("ToCurrencyRelation", fields: [toCurrencyId], references: [id]) /* Валюта получателя */
+  from_currency Currency @relation("FromCurrencyRelation", fields: [fromCurrencyId], references: [id], onDelete: Restrict) /* Валюта источника */
+  to_currency   Currency @relation("ToCurrencyRelation", fields: [toCurrencyId], references: [id], onDelete: Restrict) /* Валюта получателя */
 
   @@map("kassa_transfers") /* Название таблицы в базе данных */
 }
@@ -478,14 +478,14 @@ model Payment {
   purchaseId String? @map("purchase_id") /* Если это оплата за покупку — ссылка на Purchase */
   saleId     String? @map("sale_id") /* Если это оплата за продажу — ссылка на Sale */
 
-  organization Organization          @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
-  user         User?                 @relation(fields: [userId], references: [id]) /* Связь с пользователем, проводившим платёж */
-  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id]) /* Связь с клиентом или поставщиком */
-  kassa        Kassa                 @relation(fields: [kassaId], references: [id]) /* Касса, из которой или в которую проведён платёж */
-  currency     Currency              @relation(fields: [currencyId], references: [id]) /* Валюта, в которой произведён платёж */
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией */
+  user         User?                 @relation(fields: [userId], references: [id], onDelete: SetNull) /* Связь с пользователем, проводившим платёж */
+  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull) /* Связь с клиентом или поставщиком */
+  kassa        Kassa                 @relation(fields: [kassaId], references: [id], onDelete: Cascade) /* Касса, из которой или в которую проведён платёж */
+  currency     Currency              @relation(fields: [currencyId], references: [id], onDelete: Restrict) /* Валюта, в которой произведён платёж */
 
-  purchase Purchase? @relation("PurchasePayments", fields: [purchaseId], references: [id]) /* Ссылка на покупку, если есть */
-  sale     Sale?     @relation("SalePayments", fields: [saleId], references: [id]) /* Ссылка на продажу, если есть */
+  purchase Purchase? @relation("PurchasePayments", fields: [purchaseId], references: [id], onDelete: SetNull) /* Ссылка на покупку, если есть */
+  sale     Sale?     @relation("SalePayments", fields: [saleId], references: [id], onDelete: SetNull) /* Ссылка на продажу, если есть */
 
   createdAt            DateTime             @default(now()) @map("created_at") /* Дата и время создания записи о платеже */
   installment_payments InstallmentPayment[] /* Массив записей, если платёж разбит на части (рассрочка) */
@@ -511,9 +511,9 @@ model Transaction {
   currencyId     String      @map("currency_id") /* ID валюты, в которой совершена операция */
   description    String? /* Необязательное описание транзакции, пример: "Оплата по счёту №1234" */
 
-  organization Organization         @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
-  customer     OrganizationCustomer @relation(fields: [customerId], references: [id]) /* Связь с клиентом или контрагентом */
-  currency     Currency             @relation(fields: [currencyId], references: [id]) /* Валюта транзакции */
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict) /* Связь с организацией */
+  customer     OrganizationCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict) /* Связь с клиентом или контрагентом */
+  currency     Currency             @relation(fields: [currencyId], references: [id], onDelete: Restrict) /* Валюта транзакции */
 
   @@map("transactions") /* Название таблицы в базе данных */
 }
@@ -526,7 +526,7 @@ model Transaction {
 model Sale {
   id             String     @id @default(uuid()) /* Уникальный идентификатор продажи, пример: "8d5a2f7b-91e3-4e1b-9c65-ef8c9c1b6a91" */
   organizationId String     @map("organization_id") /* ID организации, которая выполнила продажу */
-  customerId     String     @map("customer_id") /* ID клиента, которому продан товар */
+  customerId     String?    @map("customer_id") /* ID клиента, которому продан товар */
   responsibleId  String     @map("responsible_id") /* ID пользователя, ответственного за продажу (менеджер, кассир и т.д.) */
   kassaId        String?    @map("kassa_id") /* ID кассы, из которой была произведена оплата (если применимо) */
   invoiceNumber  String     @map("invoice_number") /* Номер счёта или накладной, пример: "INV-2025-00123" */
@@ -537,13 +537,13 @@ model Sale {
   status         SaleStatus @default(DRAFT) /* Статус продажи — DRAFT, COMPLETED, CANCELED и т.д. */
   notes          String? /* Примечание к продаже, пример: "Скидка постоянному клиенту" */
 
-  organization Organization         @relation(fields: [organizationId], references: [id]) /* Связь с организацией, где проведена продажа */
-  customer     OrganizationCustomer @relation(fields: [customerId], references: [id]) /* Клиент, которому продан товар */
-  responsible  User                 @relation(fields: [responsibleId], references: [id]) /* Пользователь, оформивший продажу */
-  currency     Currency             @relation(fields: [currencyId], references: [id]) /* Валюта продажи */
-  kassa        Kassa?               @relation(fields: [kassaId], references: [id]) /* Касса, через которую прошла оплата */
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, где проведена продажа */
+  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull) /* Клиент, которому продан товар */
+  responsible  User                  @relation(fields: [responsibleId], references: [id], onDelete: Restrict) /* Пользователь, оформивший продажу */
+  currency     Currency              @relation(fields: [currencyId], references: [id], onDelete: Restrict) /* Валюта продажи */
+  kassa        Kassa?                @relation(fields: [kassaId], references: [id], onDelete: SetNull) /* Касса, через которую прошла оплата */
   items        SaleItem[] /* Список проданных товаров */
-  payments     Payment[]            @relation("SalePayments") /* Платежи, связанные с этой продажей */
+  payments     Payment[]             @relation("SalePayments") /* Платежи, связанные с этой продажей */
 
   createdAt    DateTime      @default(now()) @map("created_at") /* Дата создания записи */
   updatedAt    DateTime      @updatedAt @map("updated_at") /* Дата последнего обновления */
@@ -584,7 +584,7 @@ model Purchase {
   id             String         @id @default(uuid()) /* Уникальный идентификатор закупки, пример: "f6e5b1a2-45cd-4e99-b9a4-92c23d91a4a5" */
   organizationId String         @map("organization_id") /* ID организации, которая выполняет закупку */
   supplierId     String         @map("supplier_id") /* ID поставщика, у которого совершается покупка */
-  responsibleId  String         @map("responsible_id") /* ID пользователя, ответственного за закупку */
+  responsibleId  String?        @map("responsible_id") /* ID пользователя, ответственного за закупку */
   kassaId        String?        @map("kassa_id") /* ID кассы, из которой производится оплата (опционально) */
   invoiceNumber  String?        @map("invoice_number") /* Номер накладной или счета, пример: "INV-2025-0023" */
   purchaseDate   DateTime       @default(now()) @map("purchase_date") /* Дата и время закупки, пример: "2025-10-12T14:45:00Z" */
@@ -594,11 +594,11 @@ model Purchase {
   status         PurchaseStatus @default(DRAFT) /* Статус закупки: DRAFT, CONFIRMED, COMPLETED и т.д. */
   notes          String? /* Дополнительные комментарии или примечания по закупке */
 
-  organization Organization         @relation(fields: [organizationId], references: [id]) /* Связь с организацией, которая совершила закупку */
-  supplier     OrganizationCustomer @relation(fields: [supplierId], references: [id]) /* Связь с поставщиком */
-  responsible  User                 @relation(fields: [responsibleId], references: [id]) /* Ответственное лицо (пользователь) */
-  currency     Currency             @relation(fields: [currencyId], references: [id]) /* Валюта, в которой оформлена закупка */
-  kassa        Kassa?               @relation(fields: [kassaId], references: [id]) /* Касса, из которой произведена оплата */
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, которая совершила закупку */
+  supplier     OrganizationCustomer @relation(fields: [supplierId], references: [id], onDelete: Restrict) /* Связь с поставщиком */
+  responsible  User?                @relation(fields: [responsibleId], references: [id], onDelete: SetNull) /* Ответственное лицо (пользователь) */
+  currency     Currency             @relation(fields: [currencyId], references: [id], onDelete: Restrict) /* Валюта, в которой оформлена закупка */
+  kassa        Kassa?               @relation(fields: [kassaId], references: [id], onDelete: SetNull) /* Касса, из которой произведена оплата */
   items        PurchaseItem[] /* Список товаров, входящих в закупку */
   payments     Payment[]            @relation("PurchasePayments") /* Связанные оплаты по закупке */
 
@@ -694,12 +694,12 @@ model Document {
   type           DocumentType /* Тип документа, пример: INVOICE, CONTRACT */
   fileUrl        String       @map("file_url") /* Ссылка на файл документа, пример: "https://example.com/invoice_001.pdf" */
   uploadedById   String?      @map("uploaded_by") /* ID пользователя, загрузившего документ */
-  uploadedBy     User?        @relation(fields: [uploadedById], references: [id]) /* Связь с пользователем, загрузившим файл */
+  uploadedBy     User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull) /* Связь с пользователем, загрузившим файл */
   createdAt      DateTime     @default(now()) @map("created_at") /* Дата загрузки документа */
 
-  organization Organization          @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
-  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id]) /* Связь с клиентом, если есть */
-  sale         Sale?                 @relation(fields: [saleId], references: [id]) /* Связь с продажей, если есть */
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией */
+  customer     OrganizationCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull) /* Связь с клиентом, если есть */
+  sale         Sale?                 @relation(fields: [saleId], references: [id], onDelete: SetNull) /* Связь с продажей, если есть */
 
   @@map("documents") /* Название таблицы в базе данных */
 }
@@ -721,8 +721,8 @@ model Settings {
   logoUrl              String? /* Ссылка на логотип организации */
   theme                ThemeType @default(LIGHT) /* Тема интерфейса, пример: LIGHT или DARK */
 
-  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
-  baseCurrency Currency     @relation(fields: [baseCurrencyId], references: [id]) /* Связь с базовой валютой */
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией */
+  baseCurrency Currency     @relation(fields: [baseCurrencyId], references: [id], onDelete: Restrict) /* Связь с базовой валютой */
 
   createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
@@ -746,8 +746,8 @@ model AuditLog {
   note           String? /*Описание*/
   createdAt      DateTime @default(now()) @map("created_at") /* Дата и время создания записи аудита */
 
-  organization Organization @relation(fields: [organizationId], references: [id]) /* Связь с организацией */
-  user         User?        @relation(fields: [userId], references: [id]) /* Связь с пользователем, если есть */
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией */
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull) /* Связь с пользователем, если есть */
 
   @@map("audit_logs") /* Название таблицы в базе данных */
 }

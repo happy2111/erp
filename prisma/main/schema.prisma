@@ -2,55 +2,89 @@ generator client {
   provider = "prisma-client-js"
 }
 
+generator docs {
+  provider = "node node_modules/prisma-docs-generator"
+  output   = "../../docs/main"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+/**
+ * Модель Tenant хранит информацию о клиентах/арендаторах системы (мультиарендная структура).
+ * Используется для управления отдельными базами данных, пользователями и доступами каждого арендатора.
+ */
 model Tenant {
-  id                   String                 @id @default(uuid())
-  name                 String                 @unique
-  ownerId              String                 @map("owner_id")
-  apiKey               String                 @unique @map("api_key")
-  dbName               String                 @map("db_name")
-  dbHost               String                 @map("db_host")
-  dbPort               Int                    @map("db_port")
-  dbUser               String                 @map("db_user")
-  dbPassword           String                 @map("db_password")
-  status               TenantStatus           @default(ACTIVE)
-  owner                User                   @relation(fields: [ownerId], references: [id])
-  createdAt            DateTime               @default(now()) @map("created_at")
-  updatedAt            DateTime               @updatedAt @map("updated_at")
-  auditTenantCreations AuditTenantCreations[]
+  id                   String                 @id @default(uuid()) /* Уникальный идентификатор арендатора, пример: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d" */
+  name                 String                 @unique /* Название арендатора, пример: "Acme Corp" */
+  ownerId              String                 @map("owner_id") /* ID пользователя-владельца арендатора */
+  apiKey               String                 @unique @map("api_key") /* API ключ для интеграции, пример: "12345-abcdef-67890" */
+  dbName               String                 @map("db_name") /* Название базы данных арендатора, пример: "tenant_acme_db" */
+  dbHost               String                 @map("db_host") /* Хост базы данных, пример: "localhost" или "db.example.com" */
+  dbPort               Int                    @map("db_port") /* Порт подключения к базе данных, пример: 5432 */
+  dbUser               String                 @map("db_user") /* Пользователь базы данных, пример: "tenant_user" */
+  dbPassword           String                 @map("db_password") /* Пароль базы данных, пример: "securepassword" */
+  hostname             String?
+  status               TenantStatus           @default(ACTIVE) /* Статус арендатора: ACTIVE, INACTIVE */
+  owner                User                   @relation(fields: [ownerId], references: [id]) /* Связь с владельцем арендатора */
+  createdAt            DateTime               @default(now()) @map("created_at") /* Дата создания арендатора */
+  updatedAt            DateTime               @updatedAt @map("updated_at") /* Дата последнего обновления арендатора */
+  auditTenantCreations AuditTenantCreations[] /* Связь с аудитом создания арендаторов */
 
-  @@map("tenants")
+  @@map("tenants") /* Название таблицы в базе данных */
 }
 
+/**
+ * Модель User хранит информацию о пользователях системы.
+ * Используется для аутентификации, авторизации, связи с арендаторами и контроля прав доступа.
+ */
 model User {
-  id        String   @id @default(uuid())
-  firstName String   @map("first_name")
-  lastName  String   @map("last_name")
-  phone     String   @unique
-  email     String?  @unique
-  password  String
-  role      UserRole @default(OWNER)
-  updatedAt DateTime @updatedAt @map("updated_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  tenants   Tenant[]
+  id             String             @id @default(uuid()) /* Уникальный идентификатор пользователя, пример: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d" */
+  firstName      String             @map("first_name") /* Имя пользователя, пример: "Muhammad" */
+  lastName       String             @map("last_name") /* Фамилия пользователя, пример: "Abdurahimov" */
+  phone          String             @unique /* Номер телефона пользователя, пример: "+998901234567" */
+  email          String?            @unique /* Электронная почта пользователя, пример: "user@example.com" */
+  password       String /* Хэшированный пароль пользователя */
+  role           UserRole           @default(OWNER) /* Роль пользователя в системе, пример: OWNER, ADMIN, MANAGER */
+  updatedAt      DateTime           @updatedAt @map("updated_at") /* Дата последнего обновления данных пользователя */
+  createdAt      DateTime           @default(now()) @map("created_at") /* Дата создания пользователя */
+  tenants        Tenant[] /* Связь с арендаторами, которыми управляет пользователь */
+  refresh_tokens UserRefreshToken[] // 👈 связь с таблицей refresh-токенов
 
-  @@map("users")
+  @@map("users") /* Название таблицы в базе данных */
 }
 
-model AuditTenantCreations {
-  id        String   @id @default(uuid())
-  tenantId  String   @map("tenant_id")
-  createdBy String   @map("created_by")
-  action    String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now()) @map("created_at")
-  metadata  Json?
+/**
+ * Модель UserRefreshToken хранит refresh токены пользователей для механизма обновления доступа (JWT).
+ * Каждый токен связан с конкретным пользователем и имеет срок действия.
+ */
+model UserRefreshToken {
+  id        String   @id @default(uuid()) /* Уникальный идентификатор токена, пример: "b7d8a9f0-1c2d-3e4f-5a6b-7c8d9e0f1a2b" */
+  tokenHash String   @map("token_hash") /* Хэш refresh токена, пример: "3f5e6a8b..." */
+  userId    String   @map("user_id") /* ID пользователя, которому принадлежит токен */
+  user      User     @relation(fields: [userId], references: [id]) /* Связь с пользователем */
+  createdAt DateTime @default(now()) @map("created_at") /* Дата и время создания токена */
+  expiresAt DateTime @map("expires_at") /* Время истечения срока действия токена, пример: "2025-12-01T10:00:00Z" */
 
-  @@map("audit_tenant_creations")
+  @@map("user_refresh_tokens") /* Название таблицы в базе данных */
+}
+
+/**
+ * Модель AuditTenantCreations хранит историю создания арендаторов (tenants).
+ * Используется для аудита и отслеживания того, кто и когда создавал арендаторов в системе.
+ */
+model AuditTenantCreations {
+  id        String   @id @default(uuid()) /* Уникальный идентификатор записи аудита, пример: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d" */
+  tenantId  String   @map("tenant_id") /* ID арендатора, для которого создана запись */
+  createdBy String   @map("created_by") /* ID пользователя, который создал арендатора */
+  action    String /* Действие, пример: "CREATE" */
+  tenant    Tenant   @relation(fields: [tenantId], references: [id]) /* Связь с арендатором */
+  createdAt DateTime @default(now()) @map("created_at") /* Дата и время создания записи аудита */
+  metadata  Json? /* Дополнительные данные о создании, пример: {"note": "Тестовый арендатор"} */
+
+  @@map("audit_tenant_creations") /* Название таблицы в базе данных */
 }
 
 // enum for user roles

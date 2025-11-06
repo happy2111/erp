@@ -13,6 +13,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import { Tenant } from '@prisma/client';
+import {hostname} from "node:os";
 
 @Controller('tenant')
 export class TenantsController {
@@ -23,7 +24,7 @@ export class TenantsController {
 
   @Post()
   create(@Body() dto: CreateTenantDto) {
-    return this.tenantsService.createTenant(dto.name, dto.ownerId);
+    return this.tenantsService.createTenant(dto.name, dto.ownerId, dto.hostname);
   }
 
   @Get()

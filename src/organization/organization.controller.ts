@@ -48,7 +48,8 @@ export class OrganizationController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.organizationService.remove(+id);
+  @UseGuards(ApiKeyGuard)
+  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
+    return this.organizationService.remove(tenant, id);
   }
 }

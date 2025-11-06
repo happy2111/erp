@@ -7,18 +7,23 @@ import { TenantsModule } from './tenants/tenants.module';
 import { TenantUserModule } from './tenant-user/tenant-user.module';
 import { PrismaTenantModule } from './prisma_tenant/prisma_tenant.module';
 import { OrganizationModule } from './organization/organization.module';
+import { AuthModule } from './auth/auth.module';
+import { TenantAuthModule } from './tenant-auth/tenant-auth.module';
+import { MainUserModule } from './main-user/main-user.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
     }),
     PrismaModule,
     TenantsModule,
     TenantUserModule,
+    MainUserModule,
     PrismaTenantModule,
-    OrganizationModule
+    OrganizationModule,
+    AuthModule,
+    TenantAuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

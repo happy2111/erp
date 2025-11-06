@@ -18,8 +18,8 @@ export class TenantsService {
     private configService: ConfigService,
   ) {}
 
-  async createTenant(name: string, ownerId: string) {
-    const exists = await this.prisma.tenant.findFirst({ where: { name } });
+  async createTenant(name: string, ownerId: string, hostname: string) {
+    const exists = await this.prisma.tenant.findFirst({ where: { OR: [{name}, {hostname}] } });
 
     if (exists) {
       throw new ConflictException('Tenant with this name already exists');
@@ -40,6 +40,7 @@ export class TenantsService {
         dbPassword,
         dbHost,
         dbPort,
+        hostname,
         apiKey,
         ownerId,
         status: 'ACTIVE',

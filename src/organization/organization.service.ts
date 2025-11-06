@@ -8,7 +8,6 @@ import { Tenant } from "@prisma/client";
 @Injectable()
 export class OrganizationService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly prismaTenant: PrismaTenantService,) {
   }
 
@@ -51,7 +50,22 @@ export class OrganizationService {
     });
   }
 
-  remove(id: number) {
+  async remove(tenant: Tenant, id: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const exisiting = await client.organization.findUnique({where: {id}})
+    if (!exisiting) {
+      throw new Error(`Organization with id ${id} not found`)
+    }
+
+    await client.$transaction([
+      client.organizationUser.deleteMany({ where: { organizationId: id } }),
+      client.organizationCustomer.deleteMany({ where: { organizationId: id } }),
+      client.kassa.deleteMany({ where: { organizationId: id } }),
+      client.payment.deleteMany({ where: { organizationId: id } }),
+      // ...
+      client.organization.delete({ where: { id } }),
+    ]);
 
   }
 }

@@ -6,12 +6,13 @@ import { join } from 'path';
 import {TransformInterceptor} from "./interceptors/response.interceptor";
 import {AllExceptionsFilter} from "./common/filters/http-exception.filter";
 import {DocumentBuilder, SwaggerModule} from "@nestjs/swagger";
-import {type} from "node:os";
+import cookieParser from 'cookie-parser'; // 👈 Импортируем
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
 
+  app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,       // удаляет лишние поля из body
