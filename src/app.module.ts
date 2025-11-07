@@ -10,6 +10,7 @@ import { OrganizationModule } from './organization/organization.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantAuthModule } from './tenant-auth/tenant-auth.module';
 import { MainUserModule } from './main-user/main-user.module';
+import { OrganizationUserModule } from './organization-user/organization-user.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { MainUserModule } from './main-user/main-user.module';
     MainUserModule,
     PrismaTenantModule,
     OrganizationModule,
+    OrganizationUserModule,
     AuthModule,
     TenantAuthModule,
   ],

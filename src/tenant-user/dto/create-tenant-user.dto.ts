@@ -6,7 +6,7 @@ import {
   ValidateNested,
   IsBoolean,
   IsArray, // <-- Нужен для валидации массива
-  ArrayMinSize, // <-- Полезно, если требуется хотя бы один номер
+  ArrayMinSize, Length, Matches, // <-- Полезно, если требуется хотя бы один номер
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -19,8 +19,12 @@ export class CreateTenantUserDto {
   @IsEmail()
   email?: string;
 
-  @ApiProperty({ example: '123456' })
+  @ApiProperty({ example: 'SecureP@ss123' })
   @IsString()
+  @Length(8, 255, { message: 'Пароль должен быть длиной от 8 до 255 символов' })
+  @Matches(/^(?=.*[A-Z])(?=.*\d).{8,255}$/, {
+    message: 'Пароль должен содержать минимум одну заглавную букву (A-Z) и минимум одну цифру (0-9).',
+  })
   password: string;
 
   @ApiProperty({ example: true, required: false })
@@ -42,7 +46,7 @@ export class CreateTenantUserDto {
   @ArrayMinSize(1) // Требуем хотя бы один номер
   @ValidateNested({ each: true }) // <--- Валидируем каждый элемент массива
   @Type(() => CreateUserPhoneDto) // <--- Трансформируем каждый элемент массива в CreateUserPhoneDto
-  phone_numbers: CreateUserPhoneDto[]; // <--- Используем новый DTO
+  phone_numbers: CreateUserPhoneDto[];
 }
 
 

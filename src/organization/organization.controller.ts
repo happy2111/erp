@@ -15,6 +15,11 @@ import {ApiKeyGuard} from "../guards/api-key.guard";
 import {CurrentTenant} from "../decorators/currectTenant.decorator";
 import type {Tenant} from "@prisma/client";
 import {ApiOperation, ApiParam, ApiSecurity} from "@nestjs/swagger";
+import {JwtAuthGuard} from "../tenant-auth/guards/jwt.guard";
+import {TenantRolesGuard} from "../guards/tenant-roles.guard";
+import {Roles} from "../auth/decorators/roles.decorator";
+import {OrgUserRole} from ".prisma/client-tenant";
+import {OrgUserFilterDto} from "../organization-user/dto/org-user-filter.dto";
 
 @ApiSecurity('x-tenant-key')
 @Controller('organization')
@@ -22,7 +27,8 @@ export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
   @Post()
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
   create(@CurrentTenant() tenant: Tenant, @Body() createOrganizationDto: CreateOrganizationDto) {
     return this.organizationService.create(tenant, createOrganizationDto);
   }

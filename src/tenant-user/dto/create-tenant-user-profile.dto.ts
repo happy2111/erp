@@ -30,19 +30,58 @@ export class CreateTenantUserProfileDto {
   @IsEnum(GenderDtoEnum)
   gender?: GenderDtoEnum;
 
+  @IsString()
+  @IsOptional()
+  passportSeries?: string;
+
+  @IsString()
+  @IsOptional()
+  passportNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  issuedBy?: string;
+
+  @ApiProperty({ example: '2025-05-14T00:00:00Z', required: false })
+  @IsOptional()
+  issuedDate?: Date;
+
+  @ApiProperty({ example: '2025-05-14T00:00:00Z', required: false })
+  @IsOptional()
+  expiryDate: Date;
 
   @ApiProperty({ example: 'Узбекистан', required: false })
   @IsOptional()
   country?: string;
 
-  @ApiProperty({ example: 'Ташкент', required: false })
+  @IsString()
+  @IsOptional()
+  region?: string;
+
+  @IsString()
   @IsOptional()
   city?: string;
 
-  @ApiProperty({ example: '2025-05-14T00:00:00Z', required: false })
+  @IsString()
   @IsOptional()
-  issuedDate?: Date;
-  @ApiProperty({ example: '2025-05-14T00:00:00Z', required: false })
+  address?: string;
+
+  @ApiProperty({
+    description: "Propiska addressi",
+    example: "123 Main St, Anytown, Uzbekistan",
+    required: false
+  })
+  @IsString()
   @IsOptional()
-  expiryDate?: Date;
+  registration?: string;
+
+  @ApiProperty({
+    description: "Hudud, Rayon",
+    example: "Мирзо-Улугбекский район",
+    required: false
+  })
+  @IsString()
+  @IsOptional()
+  district?: string;
+
 }
