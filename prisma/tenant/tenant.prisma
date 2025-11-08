@@ -111,7 +111,7 @@ model User {
   /**
    * Роль пользователя
    */
-  role   Role?   @relation(fields: [roleId], references: [id]) /* Роль пользователя в системе, например: администратор, кассир */
+  role   Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull) /* Роль пользователя в системе, например: администратор, кассир */
   roleId String? /* Идентификатор роли, пример: "a1b2c3d4-e5f6-7890-1234-56789abcdef0" */
 
   /**
@@ -159,7 +159,7 @@ model UserProfile {
   registration String? /* Адрес прописки, пример: "г. Ташкент, Шайхонтохурский район" */
   district     String? @map("district") /* Район (hudud), пример: "Мирзо-Улугбекский район" */
 
-  user User @relation(fields: [userId], references: [id]) /* Связь с пользователем, которому принадлежит профиль */
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade) /* Связь с пользователем, которому принадлежит профиль */
 
   @@map("user_profiles")
 }
@@ -188,7 +188,7 @@ model UserPhone {
   phone     String   @unique /* Уникальный номер телефона пользователя, пример: "+998901234567" */
   note      String? /* Примечание к номеру, пример: "рабочий", "личный", "дополнительный" */
   isPrimary Boolean  @default(false) @map("is_primary") /* Отметка, является ли номер основным. Пример: true — основной, false — дополнительный */
-  user      User     @relation(fields: [userId], references: [id]) /* Связь с пользователем, которому принадлежит телефон */
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /* Связь с пользователем, которому принадлежит телефон */
   createdAt DateTime @default(now()) @map("created_at") /* Дата добавления номера, пример: "2025-11-02T12:00:00Z" */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
@@ -675,7 +675,7 @@ model InstallmentPayment {
   createdById   String?  @map("created_by_id") /* ID пользователя, создавшего запись о платеже */
 
   installment Installment @relation(fields: [installmentId], references: [id]) /* Связь с рассрочкой */
-  created_by  User?       @relation(fields: [createdById], references: [id]) /* Связь с пользователем, который зарегистрировал платёж */
+  created_by  User?       @relation(fields: [createdById], references: [id], onDelete: SetNull) /* Связь с пользователем, который зарегистрировал платёж */
   payment     Payment?    @relation(fields: [paymentId], references: [id]) /* Связь с основной записью платежа, если есть */
   paymentId   String?     @map("payment_id") /* ID платежа */
 

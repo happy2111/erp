@@ -15,6 +15,6 @@ export class AppController {
   // Serve the generated Prisma docs HTML
   @Get('schema/doc')
   async getHtml(@Res() res: Response) {
-    return res.sendFile(join(process.cwd(), 'docs', 'index.html'));
+    return res.sendFile(join(process.cwd(), 'docs'));
   }
 }

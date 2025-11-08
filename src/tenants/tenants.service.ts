@@ -18,7 +18,7 @@ export class TenantsService {
     private configService: ConfigService,
   ) {}
 
-  async createTenant(name: string, ownerId: string, hostname: string) {
+  async createTenant(name: string, ownerId: string | undefined, hostname: string | undefined) {
     const exists = await this.prisma.tenant.findFirst({ where: { OR: [{name}, {hostname}] } });
 
     if (exists) {
@@ -32,31 +32,31 @@ export class TenantsService {
     const dbUser = this.configService.get<string>('POSTGRES_USER', 'user');
     const dbPassword = this.configService.get<string>('POSTGRES_PASSWORD', '123456');
 
-    const tenant = await this.prisma.tenant.create({
-      data: {
-        name,
-        dbName,
-        dbUser,
-        dbPassword,
-        dbHost,
-        dbPort,
-        hostname,
-        apiKey,
-        ownerId,
-        status: 'ACTIVE',
-        auditTenantCreations: {
-          create: {
-            createdBy: ownerId,
-            action: 'TENANT_CREATED',
-            metadata: {
-              dbHost,
-              dbPort,
-              dbName,
-            },
-          }
-        }
-      },
-    });
+    const tenantData: any = {
+      name,
+      dbName,
+      dbUser,
+      dbPassword,
+      dbHost,
+      dbPort,
+      status: 'ACTIVE',
+      ...(hostname ? { hostname } : {}),
+    };
+
+    if (ownerId) {
+      tenantData.ownerId = ownerId;
+      tenantData.auditTenantCreations = {
+        create: {
+          createdBy: ownerId,
+          action: 'TENANT_CREATED',
+          metadata: { dbHost, dbPort, dbName },
+        },
+      };
+    }
+
+    const tenant = await this.prisma.tenant.create({ data: tenantData });
+
+
 
     try {
       await this.createDatabase(dbName, dbUser, dbPassword, dbHost, dbPort);

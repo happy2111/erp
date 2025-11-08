@@ -265,7 +265,6 @@ export class TenantUserService {
     return result;
   }
 
-
   async filter(tenant: Tenant, dto: TenantUserFilterDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
@@ -343,5 +342,31 @@ export class TenantUserService {
     ]);
 
     return { data, total, page: dto.page, limit: dto.limit };
+  }
+
+  async remove(tenant: Tenant, id: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const user = await client.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    await client.user.delete({ where: { id } });
+
+    // // Выполняем удаление зависимых записей вручную, т.к. в БД могут быть ограничения RESTRICT
+    // await client.$transaction(async (tx) => {
+    //   // Удаляем телефоны пользователя
+    //   await tx.userPhone.deleteMany({ where: { userId: id } });
+    //   // Удаляем связи с организациями
+    //   await tx.organizationUser.deleteMany({ where: { userId: id } });
+    //   // Удаляем профиль пользователя
+    //   await tx.userProfile.deleteMany({ where: { userId: id } });
+    //   // В конце удаляем самого пользователя
+    //   await tx.user.delete({ where: { id } });
+    // });
+
+    return { message: 'User deleted successfully' }
+
+
   }
 }

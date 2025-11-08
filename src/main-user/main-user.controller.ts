@@ -1,4 +1,4 @@
-import {Body, Controller, Get, Post} from '@nestjs/common';
+import {Body, Controller, Get, Param, Post} from '@nestjs/common';
 import {MainUserService} from "./main-user.service";
 import {CreateMainUserDto} from "./dto/create-main-user.dto";
 
@@ -17,7 +17,7 @@ export class MainUserController {
   }
 
   @Get(":id")
-  async findOne(@Body() id: string) {
+  async findOne(@Param() id: string) {
     return this.mainUserService.findOne(id);
   }
 }

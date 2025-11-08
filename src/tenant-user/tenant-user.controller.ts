@@ -1,6 +1,6 @@
 import {
   Body,
-  Controller,
+  Controller, Delete,
   Get,
   Param,
   Patch,
@@ -41,7 +41,7 @@ class TenantUserController {
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   async update(
     @CurrentTenant() tenant: Tenant,
     @Param('id') id: string,
@@ -50,11 +50,13 @@ class TenantUserController {
     return this.tenantUserService.update(tenant, id, dto);
   }
 
-
-
-
-
-
+  @Delete('remove/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  async remove(@CurrentTenant() tenant: Tenant,
+               @Param('id') id: string,) {
+    return this.tenantUserService.remove(tenant, id);
+  }
 
 }
 

@@ -19,16 +19,16 @@ datasource db {
 model Tenant {
   id                   String                 @id @default(uuid()) /* Уникальный идентификатор арендатора, пример: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d" */
   name                 String                 @unique /* Название арендатора, пример: "Acme Corp" */
-  ownerId              String                 @map("owner_id") /* ID пользователя-владельца арендатора */
+  ownerId              String?                @map("owner_id") /* ID пользователя-владельца арендатора */
   apiKey               String                 @unique @map("api_key") /* API ключ для интеграции, пример: "12345-abcdef-67890" */
   dbName               String                 @map("db_name") /* Название базы данных арендатора, пример: "tenant_acme_db" */
   dbHost               String                 @map("db_host") /* Хост базы данных, пример: "localhost" или "db.example.com" */
   dbPort               Int                    @map("db_port") /* Порт подключения к базе данных, пример: 5432 */
   dbUser               String                 @map("db_user") /* Пользователь базы данных, пример: "tenant_user" */
   dbPassword           String                 @map("db_password") /* Пароль базы данных, пример: "securepassword" */
-  hostname             String?
+  hostname             String?                @unique
   status               TenantStatus           @default(ACTIVE) /* Статус арендатора: ACTIVE, INACTIVE */
-  owner                User                   @relation(fields: [ownerId], references: [id]) /* Связь с владельцем арендатора */
+  owner                User?                  @relation(fields: [ownerId], references: [id], onDelete: SetNull) /* Связь с владельцем арендатора */
   createdAt            DateTime               @default(now()) @map("created_at") /* Дата создания арендатора */
   updatedAt            DateTime               @updatedAt @map("updated_at") /* Дата последнего обновления арендатора */
   auditTenantCreations AuditTenantCreations[] /* Связь с аудитом создания арендаторов */
@@ -64,7 +64,7 @@ model UserRefreshToken {
   id        String   @id @default(uuid()) /* Уникальный идентификатор токена, пример: "b7d8a9f0-1c2d-3e4f-5a6b-7c8d9e0f1a2b" */
   tokenHash String   @map("token_hash") /* Хэш refresh токена, пример: "3f5e6a8b..." */
   userId    String   @map("user_id") /* ID пользователя, которому принадлежит токен */
-  user      User     @relation(fields: [userId], references: [id]) /* Связь с пользователем */
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /* Связь с пользователем */
   createdAt DateTime @default(now()) @map("created_at") /* Дата и время создания токена */
   expiresAt DateTime @map("expires_at") /* Время истечения срока действия токена, пример: "2025-12-01T10:00:00Z" */
 
@@ -77,10 +77,10 @@ model UserRefreshToken {
  */
 model AuditTenantCreations {
   id        String   @id @default(uuid()) /* Уникальный идентификатор записи аудита, пример: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d" */
-  tenantId  String   @map("tenant_id") /* ID арендатора, для которого создана запись */
+  tenantId  String?  @map("tenant_id") /* ID арендатора, для которого создана запись */
   createdBy String   @map("created_by") /* ID пользователя, который создал арендатора */
   action    String /* Действие, пример: "CREATE" */
-  tenant    Tenant   @relation(fields: [tenantId], references: [id]) /* Связь с арендатором */
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull) /* Связь с арендатором */
   createdAt DateTime @default(now()) @map("created_at") /* Дата и время создания записи аудита */
   metadata  Json? /* Дополнительные данные о создании, пример: {"note": "Тестовый арендатор"} */
 

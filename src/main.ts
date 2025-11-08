@@ -6,7 +6,8 @@ import { join } from 'path';
 import {TransformInterceptor} from "./interceptors/response.interceptor";
 import {AllExceptionsFilter} from "./common/filters/http-exception.filter";
 import {DocumentBuilder, SwaggerModule} from "@nestjs/swagger";
-import cookieParser from 'cookie-parser'; // 👈 Импортируем
+import cookieParser from 'cookie-parser';
+import {PrismaExceptionFilter} from "./common/filters/prisma-exception.filter"; // 👈 Импортируем
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -30,6 +31,8 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor())
 
   app.useGlobalFilters(new AllExceptionsFilter())
+
+  app.useGlobalFilters(new PrismaExceptionFilter());
 
   const config = new DocumentBuilder()
     .setTitle('ERP API')
