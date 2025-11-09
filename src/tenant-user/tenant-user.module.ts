@@ -7,5 +7,6 @@ import {TenantAuthModule} from "../tenant-auth/tenant-auth.module";
   imports: [TenantAuthModule],
   controllers: [TenantUserController],
   providers: [TenantUserService],
+  exports: [TenantUserService]
 })
 export class TenantUserModule {}

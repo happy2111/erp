@@ -4,12 +4,12 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
+export class JwtStrategy extends PassportStrategy(Strategy, "jwt-main") {
   constructor(private prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.MAIN_JWT_SECRET || 'supersecret', // обязательно вынеси в .env
+      secretOrKey: process.env.MAIN_JWT_SECRET || 'supersecret',
     });
   }
 
@@ -19,6 +19,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     });
 
     if (!user) return null;
-    return user; // этот user будет доступен через request.user
+    return user;
   }
 }

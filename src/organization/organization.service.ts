@@ -4,11 +4,17 @@ import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import {PrismaService} from "../prisma/prisma.service";
 import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
 import { Tenant } from "@prisma/client";
+import {CreateTenantUserDto} from "../tenant-user/dto/create-tenant-user.dto";
+import {TenantUserService} from "../tenant-user/tenant-user.service";
+import {
+  CreateOrganizationUserDto
+} from "../organization-user/dto/create-org-user.dto";
 
 @Injectable()
 export class OrganizationService {
   constructor(
-    private readonly prismaTenant: PrismaTenantService,) {
+    private readonly prismaTenant: PrismaTenantService,
+    ) {
   }
 
   create(tenant: Tenant, createOrganizationDto: CreateOrganizationDto) {
@@ -17,6 +23,8 @@ export class OrganizationService {
       data: createOrganizationDto,
     })
   }
+
+
 
   findAll(tenant: Tenant) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant)

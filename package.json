@@ -23,7 +23,9 @@
     "generate:main": "npx prisma generate --schema=./prisma/main/schema.prisma",
     "generate:tenant": "npx prisma generate --schema=./prisma/tenant/tenant.prisma",
     "migrate:main:deploy": "npx prisma migrate deploy --schema=./prisma/main/schema.prisma",
-    "migrate:tenant:deploy": "npx prisma migrate deploy --schema=./prisma/tenant/tenant.prisma"
+    "migrate:tenant:deploy": "npx prisma migrate deploy --schema=./prisma/tenant/tenant.prisma",
+    "studio:main": "npx prisma studio --schema=./prisma/main/schema.prisma",
+    "studio:tenant" : "npx prisma studio --schema=./prisma/tenant/tenant.prisma"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

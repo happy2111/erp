@@ -12,9 +12,15 @@ import { PrismaTenantService } from "../prisma_tenant/prisma_tenant.service";
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
-import { Tenant } from '@prisma/client';
+import {Tenant, UserRole} from '@prisma/client';
 import {hostname} from "node:os";
+import {JwtAuthGuard} from "../auth/guards/jwt-auth.guard";
+import {RolesGuard} from "../auth/guards/roles.guard";
+import {Roles} from "../auth/decorators/roles.decorator";
+import {UserId} from "../auth/decorators/user-id.decorator";
+import {ApiBearerAuth, ApiSecurity} from "@nestjs/swagger";
 
+@ApiBearerAuth()
 @Controller('tenant')
 export class TenantsController {
   constructor(
@@ -22,38 +28,51 @@ export class TenantsController {
     private readonly PrismaTenantService: PrismaTenantService,
   ) {}
 
-  @Post()
+  @Post('create')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.PLATFORM_OWNER)
   create(@Body() dto: CreateTenantDto) {
     return this.tenantsService.createTenant(dto.name, dto.ownerId, dto.hostname);
   }
 
-  @Get()
+  @Get('all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.PLATFORM_OWNER)
   findAll() {
     return this.tenantsService.findAll();
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.PLATFORM_OWNER, UserRole.OWNER)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.tenantsService.findOne(id);
   }
 
   @Delete(':id/soft')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.PLATFORM_OWNER)
   deleteTenant(
     @Param('id') id: string,
-    @Body('userId') userId: string
+    @UserId() userId: string,
   ) {
     return this.tenantsService.deleteTenant(id, userId);
   }
 
   @Delete(':id/hard')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PLATFORM_OWNER)
   hardDeleteTenant(
     @Param('id') id: string,
-    @Body('userId') userId: string
+    @UserId() userId: string,
   ) {
     return this.tenantsService.hardDeleteTenant(id, userId);
   }
 
+
   @Post('migrate-all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PLATFORM_OWNER)
   async migrateAllTenants() {
     return this.tenantsService.updateAllTenantDatabases();
   }

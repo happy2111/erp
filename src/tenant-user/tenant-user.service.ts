@@ -17,7 +17,7 @@ import {UpdateTenantUserDto} from "./dto/update-tenant-user.dto";
 @Injectable()
 export class TenantUserService {
   constructor(
-    private readonly prismaTenant: PrismaTenantService
+    private readonly prismaTenant: PrismaTenantService,
   ) {}
 
   private readonly SALT_ROUNDS = 10;

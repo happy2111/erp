@@ -7,19 +7,33 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Client } from 'pg';
-import { execSync } from 'child_process';
 import { ConfigService } from '@nestjs/config';
 import { execa } from "execa";
+import {
+  OrganizationUserService
+} from "../organization-user/organization-user.service";
+import {OrganizationService} from "../organization/organization.service";
+import {CreateTenantUserDto} from "../tenant-user/dto/create-tenant-user.dto";
+import * as bcrypt from 'bcrypt';
+import {OrgUserRole} from ".prisma/client-tenant";
 
 @Injectable()
 export class TenantsService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private readonly organization: OrganizationService,
+    private readonly organizationUserService: OrganizationUserService,
   ) {}
 
-  async createTenant(name: string, ownerId: string | undefined, hostname: string | undefined) {
-    const exists = await this.prisma.tenant.findFirst({ where: { OR: [{name}, {hostname}] } });
+  async createTenant(
+    name: string,
+    ownerId: string | undefined,
+    hostname: string | undefined
+  ) {
+    const exists = await this.prisma.tenant.findFirst({
+      where: { OR: [{ name }, { hostname }] },
+    });
 
     if (exists) {
       throw new ConflictException('Tenant with this name already exists');
@@ -40,10 +54,16 @@ export class TenantsService {
       dbHost,
       dbPort,
       status: 'ACTIVE',
+      apiKey,
       ...(hostname ? { hostname } : {}),
     };
 
+    let owner: any = null;
+
     if (ownerId) {
+      owner = await this.prisma.user.findUnique({ where: { id: ownerId } });
+      if (!owner) throw new NotFoundException('Owner not found');
+
       tenantData.ownerId = ownerId;
       tenantData.auditTenantCreations = {
         create: {
@@ -56,11 +76,38 @@ export class TenantsService {
 
     const tenant = await this.prisma.tenant.create({ data: tenantData });
 
-
-
     try {
       await this.createDatabase(dbName, dbUser, dbPassword, dbHost, dbPort);
       await this.runMigrations(dbName, dbUser, dbPassword, dbHost, dbPort);
+
+      const organization = await this.organization.create(tenant, { name: 'Test' });
+
+      if (owner) {
+        const tenantUser: CreateTenantUserDto = {
+          ...(owner.email ? { email: owner.email } : {}),
+          password: owner.password,
+          profile: {
+            firstName: owner.firstName,
+            lastName: owner.lastName,
+          },
+          phone_numbers: [
+            {
+              phone: owner.phone,
+              isPrimary: true,
+            },
+          ],
+        };
+
+        await this.organizationUserService.createWithTenantUser(
+          tenant,
+          organization.id,
+          OrgUserRole.OWNER,
+          undefined,
+          tenantUser
+        );
+      }
+
+      return tenant;
     } catch (error) {
       await this.prisma.tenant.update({
         where: { id: tenant.id },
@@ -68,12 +115,11 @@ export class TenantsService {
       });
 
       throw new InternalServerErrorException(
-        `Failed to create tenant database: ${error.message}`
+        `Failed to create tenant database: ${error.message}`,
       );
     }
-
-    return tenant;
   }
+
 
   async findAll() {
     return this.prisma.tenant.findMany();

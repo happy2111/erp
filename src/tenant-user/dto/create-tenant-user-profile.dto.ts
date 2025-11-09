@@ -48,7 +48,7 @@ export class CreateTenantUserProfileDto {
 
   @ApiProperty({ example: '2025-05-14T00:00:00Z', required: false })
   @IsOptional()
-  expiryDate: Date;
+  expiryDate?: Date;
 
   @ApiProperty({ example: 'Узбекистан', required: false })
   @IsOptional()

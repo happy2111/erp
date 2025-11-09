@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import {PrismaService} from "../prisma/prisma.service";
 import {CreateMainUserDto} from "./dto/create-main-user.dto";
+import * as bcrypt from "bcrypt";
+import {retry} from "rxjs";
 
 @Injectable()
 export class MainUserService {
@@ -18,13 +20,15 @@ export class MainUserService {
       throw new Error('User with this email or phone already exists');
     }
 
+    const hashed = await bcrypt.hash(dto.password, 10);
+
     const user = await this.prisma.user.create({
       data: {
         firstName,
         lastName,
         phone,
         email,
-        password,
+        password: hashed,
         ...(role ? { role } : {}),
       },
     });
@@ -39,5 +43,13 @@ export class MainUserService {
     return this.prisma.user.findUnique({
       where: { id },
     });
+  }
+
+  async delete(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException("User not found");
+    await this.prisma.user.delete({where: {id}});
+
+    return {message: "User deleted successfully"};
   }
 }
