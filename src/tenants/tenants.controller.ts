@@ -10,22 +10,18 @@ import {
 import { TenantsService } from './tenants.service';
 import { PrismaTenantService } from "../prisma_tenant/prisma_tenant.service";
 import { CreateTenantDto } from './dto/create-tenant.dto';
-import { ApiKeyGuard } from '../guards/api-key.guard';
-import { CurrentTenant } from '../decorators/currectTenant.decorator';
-import {Tenant, UserRole} from '@prisma/client';
-import {hostname} from "node:os";
+import { UserRole} from '@prisma/client';
 import {JwtAuthGuard} from "../auth/guards/jwt-auth.guard";
 import {RolesGuard} from "../auth/guards/roles.guard";
 import {Roles} from "../auth/decorators/roles.decorator";
 import {UserId} from "../auth/decorators/user-id.decorator";
-import {ApiBearerAuth, ApiSecurity} from "@nestjs/swagger";
+import {ApiBearerAuth} from "@nestjs/swagger";
 
 @ApiBearerAuth()
 @Controller('tenant')
 export class TenantsController {
   constructor(
     private readonly tenantsService: TenantsService,
-    private readonly PrismaTenantService: PrismaTenantService,
   ) {}
 
   @Post('create')

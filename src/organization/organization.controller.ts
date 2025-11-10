@@ -55,7 +55,7 @@ export class OrganizationController {
     return this.organizationService.update(tenant, id, updateOrganizationDto);
   }
 
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.OWNER)
   remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {

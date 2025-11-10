@@ -27,6 +27,9 @@ import {
   CreateOrganizationUserWithTenantDto
 } from "./dto/create-organization-user-with-tenant.dto";
 import {UpdateOrganizationUserDto} from "./dto/update-organization-user.dto";
+import {
+  CurrentUser
+} from "../tenant-auth/decorators/current-tenant-user.decorator";
 
 @ApiSecurity('x-tenant-key')
 @ApiSecurity('Authorization')
@@ -36,7 +39,7 @@ export class OrganizationUserController {
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   async create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateOrganizationUserDto) {
     return await this.organizationUserService.create(tenant, dto);
   }
@@ -107,9 +110,13 @@ export class OrganizationUserController {
 
   @Delete('remove/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER)
-  async deleteOrganizationUser(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.organizationUserService.delete(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  async deleteOrganizationUser(
+    @CurrentTenant() tenant: Tenant,
+    @Param('id') id: string,
+    @CurrentUser('id') performedByUserId:string
+  ) {
+    return this.organizationUserService.delete(tenant, id, performedByUserId);
   }
 
 }

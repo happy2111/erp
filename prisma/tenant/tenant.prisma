@@ -227,14 +227,21 @@ model OrganizationCustomer {
   organizationId String  @map("organization_id") /* Идентификатор организации, к которой принадлежит клиент, пример: "b24c7d4a-1e2b-43a7-9c8b-123456789abc" */
   userId         String? @map("user_id") /* Идентификатор пользователя, если клиент зарегистрирован в системе, пример: "d34f56a7-8b90-4e12-9cde-001122334455" */
 
-  name          String /* Имя или наименование клиента, пример: "Азиз Ахмедов" или "ИП Алимов" */
+  firstName  String  @map("first_name") /* Имя пользователя, пример: "Мухаммад Юсуф" */
+  lastName   String  @map("last_name") /* Фамилия пользователя, пример: "Абдурахимов" */
+  patronymic String? /* Отчество (необязательно), пример: "Юсуфович" */
+
   phone         String /* Контактный номер клиента, пример: "+998901112233" */
-  type          CustomerType /* Тип клиента: пример: INDIVIDUAL (физ. лицо) или BUSINESS (юр. лицо) */
+  type          CustomerType /* Тип клиента: пример:    CLIENT SUPPLIER*/
   isBlacklisted Boolean      @default(false) @map("is_blacklisted") /* Отметка, внесён ли клиент в "чёрный список". Пример: true — заблокирован, false — активен */
+
+  createdAt DateTime @default(now()) @map("created_at") /* Дата добавления связи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") /* Дата последнего изменения данных связи */
 
   /**
    * Связи с другими таблицами
    */
+
   organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Организация, к которой относится клиент */
   user              User?             @relation(fields: [userId], references: [id], onDelete: SetNull) /* Пользователь, если клиент зарегистрирован в системе */
   product_instances ProductInstance[] @relation("CustomerProductInstances") /* Список экземпляров товаров, связанных с клиентом (например, проданных устройств) */

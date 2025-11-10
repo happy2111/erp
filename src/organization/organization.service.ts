@@ -66,14 +66,17 @@ export class OrganizationService {
       throw new Error(`Organization with id ${id} not found`)
     }
 
-    await client.$transaction([
-      client.organizationUser.deleteMany({ where: { organizationId: id } }),
-      client.organizationCustomer.deleteMany({ where: { organizationId: id } }),
-      client.kassa.deleteMany({ where: { organizationId: id } }),
-      client.payment.deleteMany({ where: { organizationId: id } }),
-      // ...
-      client.organization.delete({ where: { id } }),
-    ]);
+    await client.organization.delete({where: {id}})
+
+
+    // await client.$transaction([
+    //   client.organizationUser.deleteMany({ where: { organizationId: id } }),
+    //   client.organizationCustomer.deleteMany({ where: { organizationId: id } }),
+    //   client.kassa.deleteMany({ where: { organizationId: id } }),
+    //   client.payment.deleteMany({ where: { organizationId: id } }),
+    //   // ...
+    //   client.organization.delete({ where: { id } }),
+    // ]);
 
   }
 }

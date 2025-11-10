@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { TenantAuthModule } from './tenant-auth/tenant-auth.module';
 import { MainUserModule } from './main-user/main-user.module';
 import { OrganizationUserModule } from './organization-user/organization-user.module';
+import { OrganizationCustomerModule } from './organization-customer/organization-customer.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { OrganizationUserModule } from './organization-user/organization-user.mo
     PrismaTenantModule,
     OrganizationModule,
     OrganizationUserModule,
+    OrganizationCustomerModule,
     AuthModule,
     TenantAuthModule,
   ],

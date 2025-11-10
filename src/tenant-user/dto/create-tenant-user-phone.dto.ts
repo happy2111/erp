@@ -4,12 +4,15 @@ import {
   IsOptional,
   IsString,
   Matches,
-  IsNotEmpty,
+  IsNotEmpty, IsUUID,
 
 } from 'class-validator';
 import {ApiProperty} from "@nestjs/swagger";
 
 export class CreateUserPhoneDto {
+  @IsUUID()
+  userid?: string;
+
   @ApiProperty({
     example: '+998901234567',
     description: 'Уникальный номер телефона в международном формате',

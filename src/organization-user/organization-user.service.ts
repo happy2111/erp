@@ -50,7 +50,7 @@ export class OrganizationUserService {
         organizationId,
         userId: user.id,
         role,
-        ...(position ? { position } : {}),
+        ...(position ? {position} : {}),
       };
 
       // создаём запись organizationUser
@@ -109,7 +109,7 @@ export class OrganizationUserService {
     updateDto: UpdateOrganizationUserDto,
   ) {
     const existing = await this.prismaTenant[tenant.dbName].organizationUser.findUnique({
-      where: { id },
+      where: {id},
     });
 
     if (!existing) {
@@ -117,10 +117,10 @@ export class OrganizationUserService {
     }
 
     return this.prismaTenant[tenant.dbName].organizationUser.update({
-      where: { id },
+      where: {id},
       data: {
-        ...(updateDto.role ? { role: updateDto.role } : {}),
-        ...(updateDto.position ? { position: updateDto.position } : {}),
+        ...(updateDto.role ? {role: updateDto.role} : {}),
+        ...(updateDto.position ? {position: updateDto.position} : {}),
       },
       include: {
         organization: true,
@@ -134,20 +134,35 @@ export class OrganizationUserService {
     });
   }
 
-  async delete(tenant: Tenant, id: string) {
+  async delete(tenant: Tenant, id: string, performedByUserId?: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const existingUser = await client.organizationUser.findUnique({
-      where: { id: id },
+      where: {id},
     });
 
     if (!existingUser) {
       throw new NotFoundException(`Organization user with ID ${id} not found`);
     }
 
-    await client.organizationUser.delete({
-      where: { id: id },
-    });
 
-    return { message: 'Organization user deleted successfully' };
+    await client.$transaction(async (tx) => {
+      await tx.organizationUser.delete({
+        where: {id},
+      });
+
+      await tx.auditLog.create({
+        data: {
+          organizationId: existingUser.organizationId,
+          userId: performedByUserId ?? null,
+          action: 'DELETE',
+          entity: 'OrganizationUser',
+          entityId: id,
+          oldValue: existingUser,
+          newValue: undefined,
+          note: `Organization user deleted by user ${performedByUserId || 'system'}`,
+        },
+      });
+    });
+    return {message: 'Organization user deleted successfully'};
   }
 }
