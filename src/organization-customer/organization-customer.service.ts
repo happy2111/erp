@@ -1,7 +1,7 @@
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException
+  InternalServerErrorException, NotFoundException
 } from '@nestjs/common';
 import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
 import {Tenant} from "@prisma/client";
@@ -10,6 +10,7 @@ import {ConvertCustomerToUserDto} from "./dto/convert-customer-to-user.dto";
 import  { Prisma } from '.prisma/client-tenant';
 import * as bcrypt from 'bcrypt';
 import {OrganizationCustomerFilterDto} from "./dto/filter-org-customer.dto";
+import {UpdateOrgCustomerDto} from "./dto/update-org-customer.dto";
 
 @Injectable()
 export class OrganizationCustomerService {
@@ -81,7 +82,6 @@ export class OrganizationCustomerService {
       throw e;
     }
   }
-
 
   async convertCustomerToUser(tenant: Tenant, dto: ConvertCustomerToUserDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
@@ -271,7 +271,95 @@ export class OrganizationCustomerService {
     };
   }
 
+  async delete(tenant: Tenant, customerId: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
+    // Проверяем существует ли клиент
+    const customer = await client.organizationCustomer.findUnique({
+      where: { id: customerId },
+      include: { user: true }, // если нужно проверить связанные записи
+    });
 
+    if (!customer) {
+      throw new NotFoundException(`OrganizationCustomer with ID ${customerId} not found`);
+    }
+
+    // Если клиент связан с пользователем, можно либо запретить удаление, либо удалить связь
+    if (customer.userId) {
+      throw new BadRequestException(`Cannot delete customer linked to a user`);
+    }
+
+    // Удаляем клиента
+    return client.organizationCustomer.delete({
+      where: { id: customerId },
+    });
+  }
+
+  async update(tenant: Tenant, customerId: string, dto: UpdateOrgCustomerDto) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    // Проверяем существует ли клиент
+    const orgCustomer = await client.organizationCustomer.findUnique({
+      where: { id: customerId },
+      include: { user: true },
+    });
+
+    if (!orgCustomer) {
+      throw new BadRequestException(`OrganizationCustomer with ID ${customerId} not found`);
+    }
+
+    return client.$transaction(async (tx) => {
+      // 1️⃣ Обновляем OrganizationCustomer
+      const updatedCustomer = await tx.organizationCustomer.update({
+        where: { id: customerId },
+        data: { ...dto },
+      });
+
+      // 2️⃣ Если есть связанный user, синхронизируем данные
+      if (orgCustomer.userId) {
+        const userUpdateData: Prisma.UserUpdateInput = {};
+
+        // Синхронизируем phone через UserPhone
+        if (dto.phone && dto.phone !== orgCustomer.phone) {
+          // Находим основной телефон пользователя
+          const mainPhone = await tx.userPhone.findFirst({
+            where: { userId: orgCustomer.userId, isPrimary: true },
+          });
+
+          if (mainPhone) {
+            await tx.userPhone.update({
+              where: { id: mainPhone.id },
+              data: { phone: dto.phone },
+            });
+          } else {
+            // Если нет основного, создаем
+            await tx.userPhone.create({
+              data: {
+                userId: orgCustomer.userId,
+                phone: dto.phone,
+                isPrimary: true,
+                note: 'Synchronized from OrganizationCustomer',
+              },
+            });
+          }
+        }
+
+        // Синхронизируем имя/фамилию/отчество
+        const profileUpdateData: Prisma.UserProfileUpdateInput = {};
+        if (dto.firstName && dto.firstName !== orgCustomer.firstName) profileUpdateData.firstName = dto.firstName;
+        if (dto.lastName && dto.lastName !== orgCustomer.lastName) profileUpdateData.lastName = dto.lastName;
+        if (dto.patronymic && dto.patronymic !== orgCustomer.patronymic) profileUpdateData.patronymic = dto.patronymic;
+
+        if (Object.keys(profileUpdateData).length > 0) {
+          await tx.userProfile.update({
+            where: { userId: orgCustomer.userId },
+            data: profileUpdateData,
+          });
+        }
+      }
+
+      return updatedCustomer;
+    });
+  }
 
 }

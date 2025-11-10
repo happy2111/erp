@@ -1,4 +1,12 @@
-import {Body, Controller, Post, Res, UseGuards} from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Param, Patch,
+  Post,
+  Res,
+  UseGuards
+} from '@nestjs/common';
 import { OrganizationCustomerService } from './organization-customer.service';
 import {ApiKeyGuard} from "../guards/api-key.guard";
 import {JwtAuthGuard} from "../tenant-auth/guards/jwt.guard";
@@ -11,12 +19,12 @@ import {CreateOrgCustomerDto} from "./dto/create-org-customer.dto";
 import type {Response} from "express";
 import {ConvertCustomerToUserDto} from "./dto/convert-customer-to-user.dto";
 import {ApiSecurity} from "@nestjs/swagger";
-import {TenantUserFilterDto} from "../tenant-user/dto/tenant-user-filter.dto";
 import {OrganizationCustomerFilterDto} from "./dto/filter-org-customer.dto";
+import {UpdateOrgCustomerDto} from "./dto/update-org-customer.dto";
 
 @ApiSecurity('x-tenant-key')
 @Controller('organization-customer')
-export class OrganizationCustomerController {
+class OrganizationCustomerController {
   constructor(private readonly organizationCustomerService: OrganizationCustomerService) {}
 
   @Post('create')
@@ -52,8 +60,27 @@ export class OrganizationCustomerController {
 
 
   @Post('filter')
-  @UseGuards(ApiKeyGuard, )
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
   async filter(@CurrentTenant() tenant: Tenant, @Body() dto: OrganizationCustomerFilterDto) {
     return this.organizationCustomerService.filter(tenant, dto);
   }
+
+  @Delete(':id')
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  async deleteCustomer(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
+    return this.organizationCustomerService.delete(tenant, id);
+  }
+
+  @Patch(':id')
+  @UseGuards(ApiKeyGuard)
+  async update(
+    @CurrentTenant() tenant: Tenant,
+    @Param('id') id: string,
+    @Body() dto: UpdateOrgCustomerDto,
+  ) {
+    return this.organizationCustomerService.update(tenant, id, dto);
+  }
+
 }
+
+export default OrganizationCustomerController
