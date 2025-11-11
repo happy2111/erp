@@ -3,9 +3,6 @@ import {
   ConflictException,
   Injectable
 } from '@nestjs/common';
-import {PrismaService} from "../prisma/prisma.service";
-import {CreateMainUserDto} from "../main-user/dto/create-main-user.dto";
-import {CreateTenantDto} from "../tenants/dto/create-tenant.dto";
 import {CreateTenantUserDto} from "./dto/create-tenant-user.dto";
 import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
 import {Tenant} from "@prisma/client";
@@ -352,21 +349,6 @@ export class TenantUserService {
     }
 
     await client.user.delete({ where: { id } });
-
-    // // Выполняем удаление зависимых записей вручную, т.к. в БД могут быть ограничения RESTRICT
-    // await client.$transaction(async (tx) => {
-    //   // Удаляем телефоны пользователя
-    //   await tx.userPhone.deleteMany({ where: { userId: id } });
-    //   // Удаляем связи с организациями
-    //   await tx.organizationUser.deleteMany({ where: { userId: id } });
-    //   // Удаляем профиль пользователя
-    //   await tx.userProfile.deleteMany({ where: { userId: id } });
-    //   // В конце удаляем самого пользователя
-    //   await tx.user.delete({ where: { id } });
-    // });
-
     return { message: 'User deleted successfully' }
-
-
   }
 }

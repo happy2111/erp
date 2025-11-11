@@ -29,16 +29,17 @@ model Currency {
   /**
    * Связи с другими таблицами
    */
-  product_prices ProductPrice[] /* Цены на товары, привязанные к валюте */
-  kassas         Kassa[] /* Кассы, работающие в этой валюте */
-  payments       Payment[] /* Платежи, совершённые в этой валюте */
-  transactions   Transaction[] /* Финансовые транзакции, связанные с валютой */
-  sales          Sale[] /* Продажи, проведённые в этой валюте */
-  sale_items     SaleItem[] /* Товары, проданные в этой валюте */
-  purchases      Purchase[] /* Закупки, проведённые в этой валюте */
-  from_transfers KassaTransfer[] @relation("FromCurrencyRelation") /* Переводы, исходящие из этой валюты */
-  to_transfers   KassaTransfer[] @relation("ToCurrencyRelation") /* Переводы, поступающие в эту валюту */
-  settings       Settings[] /* Настройки, где указана валюта по умолчанию или используемая */
+  product_prices  ProductPrice[] /* Цены на товары, привязанные к валюте */
+  kassas          Kassa[] /* Кассы, работающие в этой валюте */
+  payments        Payment[] /* Платежи, совершённые в этой валюте */
+  transactions    Transaction[] /* Финансовые транзакции, связанные с валютой */
+  sales           Sale[] /* Продажи, проведённые в этой валюте */
+  sale_items      SaleItem[] /* Товары, проданные в этой валюте */
+  purchases       Purchase[] /* Закупки, проведённые в этой валюте */
+  from_transfers  KassaTransfer[]  @relation("FromCurrencyRelation") /* Переводы, исходящие из этой валюты */
+  to_transfers    KassaTransfer[]  @relation("ToCurrencyRelation") /* Переводы, поступающие в эту валюту */
+  settings        Settings[] /* Настройки, где указана валюта по умолчанию или используемая */
+  product_variant ProductVariant[]
 
   @@map("currencies")
 }
@@ -236,7 +237,7 @@ model OrganizationCustomer {
   isBlacklisted Boolean      @default(false) @map("is_blacklisted") /* Отметка, внесён ли клиент в "чёрный список". Пример: true — заблокирован, false — активен */
 
   createdAt DateTime @default(now()) @map("created_at") /* Дата добавления связи, пример: "2025-11-02T12:00:00Z" */
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") /* Дата последнего изменения данных связи */
+  updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего изменения данных связи */
 
   /**
    * Связи с другими таблицами
@@ -274,28 +275,69 @@ model Brand {
  * Таблица продуктов (products) — хранит информацию о товарах, принадлежащих организациям.
  */
 model Product {
-  id             String    @id @default(uuid()) /* Уникальный идентификатор товара, пример: "b123c456-d789-4ef0-9123-4567abcde890" */
-  organizationId String    @map("organization_id") /* ID организации, которой принадлежит товар */
+  id             String  @id @default(uuid()) /* Уникальный идентификатор товара, пример: "b123c456-d789-4ef0-9123-4567abcde890" */
+  code           String  @unique
+  organizationId String  @map("organization_id") /* ID организации, которой принадлежит товар */
   name           String /* Название товара, пример: "iPhone 15 Pro" */
   description    String? /* Описание товара, пример: "Смартфон с 256 ГБ памяти" */
-  expiry_date    DateTime? @map("expiry_date") /* Дата истечения срока годности, если применимо */
-  serial_number  String?   @unique @map("serial_number") /* Уникальный серийный номер, пример: "SN1234567890" */
-  barcode        String?   @unique /* Уникальный штрихкод, пример: "4789651234789" */
-  brandId        String?   @map("brand_id") /* ID бренда товара, если указан */
+  brandId        String? @map("brand_id") /* ID бренда товара, если указан */
 
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, которой принадлежит товар */
-  brand           Brand?            @relation(fields: [brandId], references: [id]) /* Связь с брендом, например "Apple" или "Samsung" */
+  brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull) /* Связь с брендом, например "Apple" или "Samsung" */
   categories      ProductCategory[] /* Категории, к которым принадлежит товар (многие-ко-многим) */
   prices          ProductPrice[] /* Цены товара в разных валютах или магазинах */
-  instances       ProductInstance[] /* Конкретные экземпляры товара (например, разные устройства с уникальными серийными номерами) */
   createdAt       DateTime          @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
   updatedAt       DateTime          @updatedAt @map("updated_at") /* Дата последнего обновления записи */
   sele_items      SaleItem[] /* Продажи, в которых участвовал данный товар */
   purchase_items  PurchaseItem[] /* Закупки, связанные с этим товаром */
   stocks          Stock[] /* Остатки товара на складе */
   product_batches ProductBatch[] /* Партии товара, например для учёта сроков годности */
+  variants        ProductVariant[]
 
   @@map("products") /* Имя таблицы в базе данных */
+}
+
+model ProductVariant {
+  id                        String                    @id @default(uuid())
+  productId                 String
+  sku                       String?                   @unique
+  barcode                   String?                   @unique
+  title                     String
+  defaultPrice              Decimal?
+  currencyId                String?
+  currency                  Currency?                 @relation(fields: [currencyId], references: [id])
+  product                   Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  product_instance          ProductInstance[]
+  product_variant_attribute ProductVariantAttribute[]
+
+  @@map("product_variants")
+}
+
+model Attribute {
+  id     String           @id @default(uuid())
+  key    String           @unique // "color", "memory"
+  name   String // Человеческое название
+  values AttributeValue[]
+}
+
+model AttributeValue {
+  id                        String                    @id @default(uuid())
+  attributeId               String                    @map("attribute_id")
+  value                     String // "Black", "32GB"
+  attribute                 Attribute                 @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  product_variant_attribute ProductVariantAttribute[]
+
+  @@unique([attributeId, value])
+}
+
+model ProductVariantAttribute {
+  id               String         @id @default(uuid())
+  productVariantId String         @map("product_variant_id")
+  attributeValueId String         @map("attribute_value_id")
+  variant          ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  value            AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
 }
 
 /**
@@ -348,17 +390,16 @@ model ProductPrice {
  * Таблица экземпляров товаров (product_instances) — хранит конкретные экземпляры товаров с уникальными серийными номерами и статусами.
  */
 model ProductInstance {
-  id             String        @id @default(uuid()) /* Уникальный идентификатор экземпляра товара, пример: "f12a34b5-c678-9def-0123-456789abcdef" */
-  productId      String        @map("product_id") /* ID товара, к которому принадлежит данный экземпляр */
-  serialNumber   String        @unique @map("serial_number") /* Уникальный серийный номер устройства, пример: "SN-ABC-123456" */
-  currentOwnerId String?       @map("current_owner_id") /* ID текущего владельца (клиента), если товар уже продан */
-  currentStatus  ProductStatus @default(IN_STOCK) @map("current_status") /* Текущий статус экземпляра: например, IN_STOCK, SOLD, RETURNED */
-  organizationId String        @map("organization_id") /* ID организации, которой принадлежит этот экземпляр */
-
-  product       Product               @relation(fields: [productId], references: [id], onDelete: Cascade) /* Связь с таблицей товаров (Product) */
-  organization  Organization          @relation("OrgProductInstances", fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией-владельцем товара */
-  current_owner OrganizationCustomer? @relation("CustomerProductInstances", fields: [currentOwnerId], references: [id], onDelete: SetNull) /* Текущий владелец товара (клиент) */
-  transactions  ProductTransaction[] /* История транзакций по этому экземпляру товара */
+  id               String                @id @default(uuid()) /* Уникальный идентификатор экземпляра товара, пример: "f12a34b5-c678-9def-0123-456789abcdef" */
+  productVariantId String?               @map("product_variant_id")
+  serialNumber     String                @unique @map("serial_number") /* Уникальный серийный номер устройства, пример: "SN-ABC-123456" */
+  currentOwnerId   String?               @map("current_owner_id") /* ID текущего владельца (клиента), если товар уже продан */
+  currentStatus    ProductStatus         @default(IN_STOCK) @map("current_status") /* Текущий статус экземпляра: например, IN_STOCK, SOLD, RETURNED */
+  organizationId   String                @map("organization_id") /* ID организации, которой принадлежит этот экземпляр */
+  productVariant   ProductVariant?       @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  organization     Organization          @relation("OrgProductInstances", fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией-владельцем товара */
+  current_owner    OrganizationCustomer? @relation("CustomerProductInstances", fields: [currentOwnerId], references: [id], onDelete: SetNull) /* Текущий владелец товара (клиент) */
+  transactions     ProductTransaction[] /* История транзакций по этому экземпляру товара */
 
   createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */

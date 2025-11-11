@@ -103,36 +103,36 @@ export class OrganizationUserService {
 
   }
 
-  async update(
-    tenant: Tenant,
-    id: string,
-    updateDto: UpdateOrganizationUserDto,
-  ) {
-    const existing = await this.prismaTenant[tenant.dbName].organizationUser.findUnique({
-      where: {id},
-    });
-
-    if (!existing) {
-      throw new NotFoundException(`OrganizationUser with id ${id} not found`);
-    }
-
-    return this.prismaTenant[tenant.dbName].organizationUser.update({
-      where: {id},
-      data: {
-        ...(updateDto.role ? {role: updateDto.role} : {}),
-        ...(updateDto.position ? {position: updateDto.position} : {}),
-      },
-      include: {
-        organization: true,
-        user: {
-          include: {
-            profile: true,
-            phone_numbers: true,
-          },
-        },
-      },
-    });
-  }
+  // async update(
+  //   tenant: Tenant,
+  //   id: string,
+  //   updateDto: UpdateOrganizationUserDto,
+  // ) {
+  //   const existing = await this.prismaTenant[tenant.dbName].organizationUser.findUnique({
+  //     where: {id},
+  //   });
+  //
+  //   if (!existing) {
+  //     throw new NotFoundException(`OrganizationUser with id ${id} not found`);
+  //   }
+  //
+  //   return this.prismaTenant[tenant.dbName].organizationUser.update({
+  //     where: {id},
+  //     data: {
+  //       ...(updateDto.role ? {role: updateDto.role} : {}),
+  //       ...(updateDto.position ? {position: updateDto.position} : {}),
+  //     },
+  //     include: {
+  //       organization: true,
+  //       user: {
+  //         include: {
+  //           profile: true,
+  //           phone_numbers: true,
+  //         },
+  //       },
+  //     },
+  //   });
+  // }
 
   async delete(tenant: Tenant, id: string, performedByUserId?: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);

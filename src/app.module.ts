@@ -12,6 +12,8 @@ import { TenantAuthModule } from './tenant-auth/tenant-auth.module';
 import { MainUserModule } from './main-user/main-user.module';
 import { OrganizationUserModule } from './organization-user/organization-user.module';
 import { OrganizationCustomerModule } from './organization-customer/organization-customer.module';
+import { BrandsModule } from './brands/brands.module';
+import { CategoryModule } from './category/category.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { OrganizationCustomerModule } from './organization-customer/organization
     OrganizationCustomerModule,
     AuthModule,
     TenantAuthModule,
+    BrandsModule,
+    CategoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

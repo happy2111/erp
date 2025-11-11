@@ -94,7 +94,7 @@ export class OrganizationUserController {
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   @ApiOperation({ summary: 'Обновить роль или должность пользователя в организации' })
   @ApiParam({ name: 'id', description: 'ID записи OrganizationUser' })
   @ApiResponse({ status: 200, description: 'Пользователь успешно обновлён' })
@@ -104,7 +104,7 @@ export class OrganizationUserController {
     @Param('id') id: string,
     @Body() dto: UpdateOrganizationUserDto,
   ) {
-    return this.organizationUserService.update(tenant, id, dto);
+    // return this.organizationUserService.update(tenant, id, dto);
   }
 
 
