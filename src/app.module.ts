@@ -14,6 +14,8 @@ import { OrganizationUserModule } from './organization-user/organization-user.mo
 import { OrganizationCustomerModule } from './organization-customer/organization-customer.module';
 import { BrandsModule } from './brands/brands.module';
 import { CategoryModule } from './category/category.module';
+import { CurrencyModule } from './currency/currency.module';
+import { CurrencyRateModule } from './currency-rate/currency-rate.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { CategoryModule } from './category/category.module';
     TenantAuthModule,
     BrandsModule,
     CategoryModule,
+    CurrencyModule,
+    CurrencyRateModule,
   ],
   controllers: [AppController],
   providers: [AppService],
