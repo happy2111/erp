@@ -16,6 +16,10 @@ import { BrandsModule } from './brands/brands.module';
 import { CategoryModule } from './category/category.module';
 import { CurrencyModule } from './currency/currency.module';
 import { CurrencyRateModule } from './currency-rate/currency-rate.module';
+import { ProductsModule } from './products/products.module';
+import { ProductVariantsModule } from './product-variants/product-variants.module';
+import { AttributesModule } from './attributes/attributes.module';
+import { CodeGeneraterModule } from './code-generater/code-generater.module';
 
 @Module({
   imports: [
@@ -36,6 +40,10 @@ import { CurrencyRateModule } from './currency-rate/currency-rate.module';
     CategoryModule,
     CurrencyModule,
     CurrencyRateModule,
+    ProductsModule,
+    ProductVariantsModule,
+    AttributesModule,
+    CodeGeneraterModule,
   ],
   controllers: [AppController],
   providers: [AppService],

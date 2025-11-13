@@ -52,7 +52,7 @@ export class CurrencyController {
     return this.currencyService.create(tenant, dto);
   }
 
-  @Get()
+  @Get('all')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
   @ApiOperation({ summary: 'Получить список всех валют' })
   @ApiResponse({

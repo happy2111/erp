@@ -297,47 +297,73 @@ model Product {
   @@map("products") /* Имя таблицы в базе данных */
 }
 
+/**
+ * Модель ProductVariant описывает варианты конкретного товара,
+ * например — разные цвета, размеры или комплектации одного продукта.
+ * Каждый вариант может иметь собственный артикул (SKU), штрихкод и цену.
+ */
 model ProductVariant {
-  id                        String                    @id @default(uuid())
-  productId                 String
-  sku                       String?                   @unique
-  barcode                   String?                   @unique
-  title                     String
-  defaultPrice              Decimal?
-  currencyId                String?
-  currency                  Currency?                 @relation(fields: [currencyId], references: [id])
-  product                   Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt                 DateTime                  @default(now())
-  updatedAt                 DateTime                  @updatedAt
-  product_instance          ProductInstance[]
-  product_variant_attribute ProductVariantAttribute[]
+  id                        String                    @id @default(uuid()) /* Уникальный идентификатор варианта товара, пример: "8a4b5c6d-7e8f-9012-3456-7890abcdef12" */
+  productId                 String /* ID товара, к которому принадлежит данный вариант */
+  sku                       String?                   @unique /* Уникальный артикул варианта (SKU), пример: "SKU-RED-XL" */
+  barcode                   String?                   @unique /* Уникальный штрихкод товара, пример: "1234567890123" */
+  title                     String /* Название варианта, пример: "iPhone 14 Pro 256GB Silver" */
+  defaultPrice              Decimal? /* Цена по умолчанию для этого варианта, пример: 1299.99 */
+  currencyId                String? /* ID валюты, в которой указана цена */
+  currency                  Currency?                 @relation(fields: [currencyId], references: [id]) /* Связь с валютой */
+  product                   Product                   @relation(fields: [productId], references: [id], onDelete: Cascade) /* Связь с основным товаром */
+  createdAt                 DateTime                  @default(now()) /* Дата и время создания записи */
+  updatedAt                 DateTime                  @updatedAt /* Дата и время последнего обновления */
+  product_instance          ProductInstance[] /* Экземпляры (реальные единицы) данного варианта товара */
+  product_variant_attribute ProductVariantAttribute[] /* Атрибуты, описывающие вариант (например, цвет, размер и т.п.) */
 
-  @@map("product_variants")
+  @@map("product_variants") /* Название таблицы в базе данных */
 }
 
+/*
+  Модель Attribute описывает характеристику товара,
+  такую как "Цвет", "Память", "Размер" и т.д.
+  Каждая характеристика имеет уникальный ключ и список возможных значений.
+*/
 model Attribute {
-  id     String           @id @default(uuid())
-  key    String           @unique // "color", "memory"
-  name   String // Человеческое название
-  values AttributeValue[]
+  id     String           @id @default(uuid()) /* Уникальный идентификатор атрибута, пример: "7f6e5d4c-3b2a-1908-7654-3210abcdef98" */
+  key    String           @unique /* Уникальный ключ характеристики, пример: "color" или "memory" */
+  name   String /* Отображаемое (человеческое) название, пример: "Цвет" или "Память" */
+  values AttributeValue[] /* Список возможных значений данного атрибута (например, "Красный", "128GB") */
+
+  @@map("attributes") /* Название таблицы в базе данных */
 }
 
+/*
+  Модель AttributeValue описывает конкретное значение характеристики товара.
+  Например, для характеристики "Цвет" возможные значения — "Черный", "Белый".
+  Для "Память" — "32GB", "128GB" и т.д.
+*/
 model AttributeValue {
-  id                        String                    @id @default(uuid())
-  attributeId               String                    @map("attribute_id")
-  value                     String // "Black", "32GB"
-  attribute                 Attribute                 @relation(fields: [attributeId], references: [id], onDelete: Cascade)
-  product_variant_attribute ProductVariantAttribute[]
+  id                        String                    @id @default(uuid()) /* Уникальный идентификатор значения, пример: "9a8b7c6d-5e4f-3a2b-1c0d-123456abcdef" */
+  attributeId               String                    @map("attribute_id") /* ID характеристики, к которой относится это значение */
+  value                     String /* Конкретное значение характеристики, пример: "Black" или "128GB" */
+  attribute                 Attribute                 @relation(fields: [attributeId], references: [id], onDelete: Cascade) /* Связь с моделью Attribute */
+  product_variant_attribute ProductVariantAttribute[] /* Связь с моделью ProductVariantAttribute — какие варианты товаров используют это значение */
 
-  @@unique([attributeId, value])
+  @@unique([attributeId, value]) /* Уникальная комбинация: у одного атрибута не может быть два одинаковых значения */
+  @@map("attribute_values") /* Название таблицы в базе данных */
 }
 
+/*
+  Модель ProductVariantAttribute связывает вариант товара с конкретными значениями атрибутов.
+  Например: вариант iPhone 13 → цвет "Black" и память "128GB".
+  Это связь "многие-ко-многим" между ProductVariant и AttributeValue.
+*/
 model ProductVariantAttribute {
-  id               String         @id @default(uuid())
-  productVariantId String         @map("product_variant_id")
-  attributeValueId String         @map("attribute_value_id")
-  variant          ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-  value            AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
+  id               String         @id @default(uuid()) /* Уникальный идентификатор связи, пример: "f12a34b5-c678-9def-0123-456789abcdef" */
+  productVariantId String         @map("product_variant_id") /* ID варианта товара */
+  attributeValueId String         @map("attribute_value_id") /* ID значения атрибута (например, "Black" или "128GB") */
+  variant          ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade) /* Связь с вариантом товара */
+  value            AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade) /* Связь с конкретным значением характеристики */
+
+  @@unique([productVariantId, attributeValueId]) /* Один вариант не может иметь повтор одного и того же значения атрибута */
+  @@map("product_variant_attributes") /* Название таблицы в базе данных */
 }
 
 /**
@@ -899,9 +925,9 @@ enum CustomerType {
 }
 
 enum PriceType {
-  CASH //Цена при оплате наличными / сразу
-  INSTALLMENT //Рассрочка (например, на 6/12 месяцев)
-  WHOLESALE //Оптовая цена, при больших объёмах
+  CASH // Цена при оплате наличными / сразу
+  INSTALLMENT // Рассрочка (например, на 6/12 месяцев)
+  WHOLESALE // Оптовая цена, при больших объёмах
   ONLINE // цена в интернет-магазине (Click / Telegram)
   SPECIAL // индивидуальная скидка / промо
 }
