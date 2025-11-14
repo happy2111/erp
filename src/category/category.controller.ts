@@ -64,7 +64,7 @@ export class CategoriesController {
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   @ApiOperation({ summary: 'Обновить категорию по ID' })
   @ApiParam({ name: 'id', description: 'ID категории' })
   @ApiResponse({ status: 200, description: 'Категория успешно обновлена' })

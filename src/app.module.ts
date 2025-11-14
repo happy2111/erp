@@ -20,6 +20,9 @@ import { ProductsModule } from './products/products.module';
 import { ProductVariantsModule } from './product-variants/product-variants.module';
 import { AttributesModule } from './attributes/attributes.module';
 import { CodeGeneraterModule } from './code-generater/code-generater.module';
+import { ProductCategoryModule } from './product-category/product-category.module';
+import { ProductPriceModule } from './product-price/product-price.module';
+import { StockModule } from './stock/stock.module';
 
 @Module({
   imports: [
@@ -44,6 +47,9 @@ import { CodeGeneraterModule } from './code-generater/code-generater.module';
     ProductVariantsModule,
     AttributesModule,
     CodeGeneraterModule,
+    ProductCategoryModule,
+    ProductPriceModule,
+    StockModule,
   ],
   controllers: [AppController],
   providers: [AppService],

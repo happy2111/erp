@@ -320,11 +320,11 @@ model ProductVariant {
   @@map("product_variants") /* Название таблицы в базе данных */
 }
 
-/*
-  Модель Attribute описывает характеристику товара,
-  такую как "Цвет", "Память", "Размер" и т.д.
-  Каждая характеристика имеет уникальный ключ и список возможных значений.
-*/
+/**
+ * Модель Attribute описывает характеристику товара,
+ * такую как "Цвет", "Память", "Размер" и т.д.
+ * Каждая характеристика имеет уникальный ключ и список возможных значений.
+ */
 model Attribute {
   id     String           @id @default(uuid()) /* Уникальный идентификатор атрибута, пример: "7f6e5d4c-3b2a-1908-7654-3210abcdef98" */
   key    String           @unique /* Уникальный ключ характеристики, пример: "color" или "memory" */
@@ -334,11 +334,11 @@ model Attribute {
   @@map("attributes") /* Название таблицы в базе данных */
 }
 
-/*
-  Модель AttributeValue описывает конкретное значение характеристики товара.
-  Например, для характеристики "Цвет" возможные значения — "Черный", "Белый".
-  Для "Память" — "32GB", "128GB" и т.д.
-*/
+/**
+ * Модель AttributeValue описывает конкретное значение характеристики товара.
+ * Например, для характеристики "Цвет" возможные значения — "Черный", "Белый".
+ * Для "Память" — "32GB", "128GB" и т.д.
+ */
 model AttributeValue {
   id                        String                    @id @default(uuid()) /* Уникальный идентификатор значения, пример: "9a8b7c6d-5e4f-3a2b-1c0d-123456abcdef" */
   attributeId               String                    @map("attribute_id") /* ID характеристики, к которой относится это значение */
@@ -350,11 +350,11 @@ model AttributeValue {
   @@map("attribute_values") /* Название таблицы в базе данных */
 }
 
-/*
-  Модель ProductVariantAttribute связывает вариант товара с конкретными значениями атрибутов.
-  Например: вариант iPhone 13 → цвет "Black" и память "128GB".
-  Это связь "многие-ко-многим" между ProductVariant и AttributeValue.
-*/
+/**
+ * Модель ProductVariantAttribute связывает вариант товара с конкретными значениями атрибутов.
+ * Например: вариант iPhone 13 → цвет "Black" и память "128GB".
+ * Это связь "многие-ко-многим" между ProductVariant и AttributeValue.
+ */
 model ProductVariantAttribute {
   id               String         @id @default(uuid()) /* Уникальный идентификатор связи, пример: "f12a34b5-c678-9def-0123-456789abcdef" */
   productVariantId String         @map("product_variant_id") /* ID варианта товара */
@@ -385,8 +385,8 @@ model Category {
 model ProductCategory {
   productId  String /* ID товара, пример: "b123c456-d789-4ef0-9123-4567abcde890" */
   categoryId String /* ID категории, пример: "d3b6a4f1-90c7-4e1e-9d8e-64f3b1a0a2d3" */
-  product    Product  @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
-  category   Category @relation(fields: [categoryId], references: [id]) /* Связь с таблицей категорий (Category) */
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade) /* Связь с таблицей товаров (Product) */
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade) /* Связь с таблицей категорий (Category) */
 
   @@id([productId, categoryId]) /* Составной первичный ключ: уникальная пара "товар + категория" */
   @@map("product_categories") /* Имя таблицы в базе данных */
@@ -399,11 +399,11 @@ model ProductPrice {
   id             String        @id @default(uuid()) /* Уникальный идентификатор цены, пример: "b123c456-d789-4ef0-9123-4567abcde890" */
   productId      String        @map("product_id") /* ID товара, к которому относится данная цена */
   organizationId String?       @map("organization_id") /* ID организации, для которой указана цена (если применимо) */
-  priceType      PriceType     @map("price_type") /* Тип цены: например, RETAIL (розничная), WHOLESALE (оптовая) */
+  priceType      PriceType     @map("price_type") /* Тип цены: например, CASH (наличными), WHOLESALE (оптовая), INSTALLMENT (Рассрочка) */
   amount         Decimal       @map("amount") /* Сумма цены в валюте, пример: 1299.99 */
   currencyId     String        @map("currency_id") /* ID валюты, в которой указана цена */
   currency       Currency      @relation(fields: [currencyId], references: [id]) /* Связь с таблицей валют (Currency) */
-  product        Product       @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
+  product        Product       @relation(fields: [productId], references: [id], onDelete: Cascade) /* Связь с таблицей товаров (Product) */
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, если цена специфична для неё */
   customerType   CustomerType? @map("customer_type") /* Тип клиента, для которого установлена цена: например, CLIENT или SUPPLIER */
   createdAt      DateTime      @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */

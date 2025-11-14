@@ -7,6 +7,7 @@ import { ProductFilterDto } from './dto/filter-product.dto';
 import { Prisma } from '.prisma/client-tenant';
 import {CodeGeneratorService} from "../code-generater/code-generater.service";
 
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -41,20 +42,54 @@ export class ProductsService {
       where.name = { contains: search, mode: 'insensitive' };
     }
 
+    const includeCategories = {
+      categories: {
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      },
+      brand: true,
+      variants: true,
+      prices: true
+    };
+
+
     const [data, total] = await Promise.all([
       client.product.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
-          variants: true
-        }
+        include: includeCategories
       }),
       client.product.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    const transformedData: any = data.map(product => {
+      const categories = product.categories.map(pc => ({
+        id: pc.categoryId,
+        name: pc.category.name,
+      }));
+
+      const { categories: _drop, ...rest } = product;
+
+      return {
+        ...rest,
+        categories
+      }
+    })
+
+    return {
+      data: transformedData,
+      total,
+      page,
+      limit
+    };
   }
 
   async findOne(tenant: Tenant, id: string) {
