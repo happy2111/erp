@@ -23,6 +23,7 @@ import { CodeGeneraterModule } from './code-generater/code-generater.module';
 import { ProductCategoryModule } from './product-category/product-category.module';
 import { ProductPriceModule } from './product-price/product-price.module';
 import { StockModule } from './stock/stock.module';
+import { ProductBatchModule } from './product-batch/product-batch.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { StockModule } from './stock/stock.module';
     ProductCategoryModule,
     ProductPriceModule,
     StockModule,
+    ProductBatchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

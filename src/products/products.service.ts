@@ -55,7 +55,8 @@ export class ProductsService {
       },
       brand: true,
       variants: true,
-      prices: true
+      prices: true,
+      stocks: true
     };
 
 

@@ -282,17 +282,14 @@ model Product {
   description    String? /* Описание товара, пример: "Смартфон с 256 ГБ памяти" */
   brandId        String? @map("brand_id") /* ID бренда товара, если указан */
 
-  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, которой принадлежит товар */
-  brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull) /* Связь с брендом, например "Apple" или "Samsung" */
-  categories      ProductCategory[] /* Категории, к которым принадлежит товар (многие-ко-многим) */
-  prices          ProductPrice[] /* Цены товара в разных валютах или магазинах */
-  createdAt       DateTime          @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
-  updatedAt       DateTime          @updatedAt @map("updated_at") /* Дата последнего обновления записи */
-  sele_items      SaleItem[] /* Продажи, в которых участвовал данный товар */
-  purchase_items  PurchaseItem[] /* Закупки, связанные с этим товаром */
-  stocks          Stock[] /* Остатки товара на складе */
-  product_batches ProductBatch[] /* Партии товара, например для учёта сроков годности */
-  variants        ProductVariant[]
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией, которой принадлежит товар */
+  brand        Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull) /* Связь с брендом, например "Apple" или "Samsung" */
+  categories   ProductCategory[] /* Категории, к которым принадлежит товар (многие-ко-многим) */
+  prices       ProductPrice[] /* Цены товара в разных валютах или магазинах */
+  createdAt    DateTime          @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
+  updatedAt    DateTime          @updatedAt @map("updated_at") /* Дата последнего обновления записи */
+
+  variants ProductVariant[]
 
   @@map("products") /* Имя таблицы в базе данных */
 }
@@ -316,6 +313,11 @@ model ProductVariant {
   updatedAt                 DateTime                  @updatedAt /* Дата и время последнего обновления */
   product_instance          ProductInstance[] /* Экземпляры (реальные единицы) данного варианта товара */
   product_variant_attribute ProductVariantAttribute[] /* Атрибуты, описывающие вариант (например, цвет, размер и т.п.) */
+
+  product_batches ProductBatch[] /* Партии товара, например для учёта сроков годности */
+  stocks          Stock[] /* Остатки товара на складе */
+  purchase_items  PurchaseItem[] /* Закупки, связанные с этим товаром */
+  sele_items      SaleItem[] /* Продажи, в которых участвовал данный товар */
 
   @@map("product_variants") /* Название таблицы в базе данных */
 }
@@ -455,13 +457,14 @@ model ProductTransaction {
  * Таблица партий товаров (product_batches) — хранит данные о партиях поставленных или произведённых товаров, включая срок годности и количество.
  */
 model ProductBatch {
-  id          String    @id @default(uuid()) /* Уникальный идентификатор партии, пример: "a12b34c5-d67e-890f-1234-56789abcdef0" */
-  productId   String    @map("product_id") /* ID товара, к которому относится данная партия */
-  batchNumber String    @map("batch_number") /* Номер партии, пример: "BATCH-2025-001" */
-  expiryDate  DateTime? @map("expiry_date") /* Срок годности партии, если применимо, пример: "2026-05-30T00:00:00Z" */
-  quantity    Int /* Количество единиц товара в партии, пример: 500 */
-  isValid     Boolean   @default(true) @map("is_valid") /* Статус активности партии: true — активна, false — просрочена или списана */
-  product     Product   @relation(fields: [productId], references: [id]) /* Связь с таблицей товаров (Product) */
+  id               String         @id @default(uuid()) /* Уникальный идентификатор партии, пример: "a12b34c5-d67e-890f-1234-56789abcdef0" */
+  productVariantId String         @map("product_variant_id") /* ID товара, к которому относится данная партия */
+  batchNumber      String         @map("batch_number") /* Номер партии, пример: "BATCH-2025-001" */
+  expiryDate       DateTime?      @map("expiry_date") /* Срок годности партии, если применимо, пример: "2026-05-30T00:00:00Z" */
+  quantity         Int /* Количество единиц товара в партии, пример: 500 */
+  isValid          Boolean        @default(true) @map("is_valid") /* Статус активности партии: true — активна, false — просрочена или списана */
+  createdAt        DateTime       @default(now()) @map("created_at") /* Дата и время создания записи */
+  product_variant  ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
 
   @@map("product_batches") /* Имя таблицы в базе данных */
 }
@@ -470,14 +473,15 @@ model ProductBatch {
  * Таблица складских остатков (stocks) — хранит информацию о количестве каждого товара на складе конкретной организации.
  */
 model Stock {
-  id             String       @id @default(uuid()) /* Уникальный идентификатор записи склада, пример: "e12f34a5-b67c-890d-1234-56789abcdef0" */
-  organizationId String       @map("organization_id") /* ID организации, которой принадлежит данный складской остаток */
-  productId      String       @map("product_id") /* ID товара, который хранится на складе */
-  quantity       Int          @default(0) /* Текущее количество единиц товара на складе, пример: 150 */
-  updatedAt      DateTime     @updatedAt @map("updated_at") /* Дата и время последнего обновления записи, пример: "2025-11-02T12:00:00Z" */
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с таблицей организаций (Organization) */
-  product        Product      @relation(fields: [productId], references: [id], onDelete: Restrict) /* Связь с таблицей товаров (Product) */
+  id               String         @id @default(uuid()) /* Уникальный идентификатор записи склада, пример: "e12f34a5-b67c-890d-1234-56789abcdef0" */
+  organizationId   String         @map("organization_id") /* ID организации, которой принадлежит данный складской остаток */
+  productVariantId String         @map("product_variant_id") /* ID товара, который хранится на складе */
+  quantity         Int            @default(0) /* Текущее количество единиц товара на складе, пример: 150 */
+  updatedAt        DateTime       @updatedAt @map("updated_at") /* Дата и время последнего обновления записи, пример: "2025-11-02T12:00:00Z" */
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с таблицей организаций (Organization) */
+  product_variant  ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade) /* Связь с таблицей товаров (Product) */
 
+  @@unique([organizationId, productVariantId])
   @@map("stocks") /* Имя таблицы в базе данных */
 }
 
@@ -633,17 +637,17 @@ model Sale {
  * Используется для детализации продаж и расчёта итоговых сумм.
  */
 model SaleItem {
-  id         String  @id @default(uuid()) /* Уникальный идентификатор позиции продажи, пример: "c71b90e2-2b15-45df-a318-ecb34a62a923" */
-  saleId     String  @map("sale_id") /* ID продажи, к которой относится эта позиция */
-  productId  String  @map("product_id") /* ID проданного товара */
-  quantity   Int /* Количество проданных единиц товара, пример: 3 */
-  price      Decimal /* Цена за единицу товара, пример: 250000.00 */
-  total      Decimal /* Общая сумма по этой позиции = quantity × price, пример: 750000.00 */
-  currencyId String  @map("currency_id") /* Валюта, в которой указана цена и сумма, пример: "UZS" */
+  id               String  @id @default(uuid()) /* Уникальный идентификатор позиции продажи, пример: "c71b90e2-2b15-45df-a318-ecb34a62a923" */
+  saleId           String  @map("sale_id") /* ID продажи, к которой относится эта позиция */
+  productVariantId String  @map("product_variant_id") /* ID проданного товара */
+  quantity         Int /* Количество проданных единиц товара, пример: 3 */
+  price            Decimal /* Цена за единицу товара, пример: 250000.00 */
+  total            Decimal /* Общая сумма по этой позиции = quantity × price, пример: 750000.00 */
+  currencyId       String  @map("currency_id") /* Валюта, в которой указана цена и сумма, пример: "UZS" */
 
-  sale     Sale     @relation(fields: [saleId], references: [id]) /* Связь с продажей, которой принадлежит товар */
-  product  Product  @relation(fields: [productId], references: [id]) /* Связь с проданным товаром */
-  currency Currency @relation(fields: [currencyId], references: [id]) /* Валюта, используемая в продаже */
+  sale            Sale           @relation(fields: [saleId], references: [id]) /* Связь с продажей, которой принадлежит товар */
+  product_variant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade) /* Связь с проданным товаром */
+  currency        Currency       @relation(fields: [currencyId], references: [id]) /* Валюта, используемая в продаже */
 
   @@map("sale_items") /* Название таблицы в базе данных */
 }
@@ -688,16 +692,16 @@ model Purchase {
  * Используется для детализации закупок и расчёта общей стоимости.
  */
 model PurchaseItem {
-  id         String  @id @default(uuid()) /* Уникальный идентификатор позиции закупки, пример: "c71b90e2-2b15-45df-a318-ecb34a62a923" */
-  purchaseId String  @map("purchase_id") /* ID закупки, к которой относится эта позиция */
-  productId  String  @map("product_id") /* ID товара, который закуплен */
-  quantity   Int /* Количество единиц товара, пример: 10 */
-  price      Decimal /* Цена за единицу товара, пример: 12000.50 */
-  discount   Decimal @default(0.00) /* Скидка на единицу товара, пример: 500.00 */
-  total      Decimal /* Итоговая сумма по позиции = (price - discount) * quantity, пример: 115000.00 */
+  id               String  @id @default(uuid()) /* Уникальный идентификатор позиции закупки, пример: "c71b90e2-2b15-45df-a318-ecb34a62a923" */
+  purchaseId       String  @map("purchase_id") /* ID закупки, к которой относится эта позиция */
+  productVariantId String  @map("product_variant_id") /* ID товара, который закуплен */
+  quantity         Int /* Количество единиц товара, пример: 10 */
+  price            Decimal /* Цена за единицу товара, пример: 12000.50 */
+  discount         Decimal @default(0.00) /* Скидка на единицу товара, пример: 500.00 */
+  total            Decimal /* Итоговая сумма по позиции = (price - discount) * quantity, пример: 115000.00 */
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id]) /* Связь с закупкой */
-  product  Product  @relation(fields: [productId], references: [id]) /* Связь с закупленным товаром */
+  purchase        Purchase       @relation(fields: [purchaseId], references: [id]) /* Связь с закупкой */
+  product_variant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade) /* Связь с закупленным товаром */
 
   @@map("purchase_items") /* Название таблицы в базе данных */
 }
