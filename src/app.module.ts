@@ -22,8 +22,10 @@ import { AttributesModule } from './attributes/attributes.module';
 import { CodeGeneraterModule } from './code-generater/code-generater.module';
 import { ProductCategoryModule } from './product-category/product-category.module';
 import { ProductPriceModule } from './product-price/product-price.module';
-import { StockModule } from './stock/stock.module';
 import { ProductBatchModule } from './product-batch/product-batch.module';
+import { ProductInstanceModule } from './product-instance/product-instance.module';
+import { ProductTransactionModule } from './product-transaction/product-transaction.module';
+import { MainUserRefreshTokenModule } from './main-user-refresh-token/main-user-refresh-token.module';
 
 @Module({
   imports: [
@@ -50,8 +52,10 @@ import { ProductBatchModule } from './product-batch/product-batch.module';
     CodeGeneraterModule,
     ProductCategoryModule,
     ProductPriceModule,
-    StockModule,
     ProductBatchModule,
+    ProductInstanceModule,
+    ProductTransactionModule,
+    MainUserRefreshTokenModule,
   ],
   controllers: [AppController],
   providers: [AppService],

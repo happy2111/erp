@@ -448,7 +448,7 @@ model ProductTransaction {
   action            ProductAction /* Тип действия: например, SOLD, RETURNED, TRANSFERRED */
   date              DateTime        @default(now()) /* Дата и время транзакции, пример: "2025-11-02T12:00:00Z" */
   description       String? /* Дополнительное описание или комментарий к транзакции, пример: "Возврат по гарантии" */
-  product_instance  ProductInstance @relation(fields: [productInstanceId], references: [id]) /* Связь с экземпляром товара (ProductInstance) */
+  product_instance  ProductInstance @relation(fields: [productInstanceId], references: [id], onDelete: Cascade) /* Связь с экземпляром товара (ProductInstance) */
 
   @@map("product_transactions") /* Имя таблицы в базе данных */
 }

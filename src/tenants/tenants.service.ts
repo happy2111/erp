@@ -16,6 +16,9 @@ import {OrganizationService} from "../organization/organization.service";
 import {CreateTenantUserDto} from "../tenant-user/dto/create-tenant-user.dto";
 import * as bcrypt from 'bcrypt';
 import {OrgUserRole} from ".prisma/client-tenant";
+import { TenantFilterDto } from "./dto/filter-tenant.dto";
+import {Prisma, Tenant} from '@prisma/client'
+import {UpdateTenantDto} from "./dto/update-tenant.dto";
 
 @Injectable()
 export class TenantsService {
@@ -125,6 +128,65 @@ export class TenantsService {
     return this.prisma.tenant.findMany();
   }
 
+  async filterTenants(query: TenantFilterDto) {
+    const where: Prisma.TenantWhereInput = {};
+
+    // ---- Поля ----
+    if (query.name) where.name = { contains: query.name, mode: 'insensitive' };
+    if (query.ownerId) where.ownerId = query.ownerId;
+    if (query.apiKey) where.apiKey = { contains: query.apiKey };
+    if (query.hostname) where.hostname = { contains: query.hostname };
+    if (query.status) where.status = query.status;
+
+    // ---- Поиск по тексту ----
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { apiKey: { contains: query.search } },
+        { hostname: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // ---- createdAt ----
+    if (query.createdFrom || query.createdTo) {
+      where.createdAt = {};
+      if (query.createdFrom) where.createdAt.gte = query.createdFrom;
+      if (query.createdTo) where.createdAt.lte = query.createdTo;
+    }
+
+    // ---- updatedAt ----
+    if (query.updatedFrom || query.updatedTo) {
+      where.updatedAt = {};
+      if (query.updatedFrom) where.updatedAt.gte = query.updatedFrom;
+      if (query.updatedTo) where.updatedAt.lte = query.updatedTo;
+    }
+
+    // ---- Пагинация ----
+    const take = query.limit ?? 20;
+    const skip = (query.page - 1) * take;
+
+    // ---- Выполнить запрос ----
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.tenant.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          owner: true
+        }
+      }),
+      this.prisma.tenant.count({ where }),
+    ]);
+
+    return {
+      total,
+      page: query.page,
+      limit: take,
+      items,
+    };
+  }
+
   async findOne(id: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id } });
 
@@ -133,6 +195,32 @@ export class TenantsService {
     }
 
     return tenant;
+  }
+
+
+  async update(tenantId: string, dto: UpdateTenantDto): Promise<Tenant> {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException(`Tenant not found`);
+    }
+
+    // Обновляем только разрешенные поля
+    const updatedTenant = await this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        name: dto.name ?? tenant.name,
+        ownerId: dto.ownerId ?? tenant.ownerId,
+        status: dto.status ?? tenant.status,
+        hostname: dto.hostname ?? tenant.hostname,
+        dbName: dto.dbName ?? tenant.dbName,
+        dbHost: dto.dbHost ?? tenant.dbHost,
+        dbPort: dto.dbPort ?? tenant.dbPort,
+        dbUser: dto.dbUser ?? tenant.dbUser,
+        dbPassword: dto.dbPassword ?? tenant.dbPassword,
+      },
+    });
+
+    return updatedTenant;
   }
 
   /**

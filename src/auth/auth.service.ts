@@ -65,7 +65,7 @@ export class AuthService {
   }
 
   async refresh(userId: string, refreshToken: string, res: Response) {
-    const tokens = await this.prisma.userRefreshToken.findMany({ where: { userId } });
+    const tokens = await this.prisma.userRefreshToken.findMany({ where: { userId }, include: { user: true } });
 
     if (!tokens.length) throw new ForbiddenException('No active sessions');
 
@@ -104,7 +104,9 @@ export class AuthService {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return { access_token: newAccess };
+    const {password , ...puredata} =  tokens[0].user;
+
+    return { access_token: newAccess, user: puredata};
   }
 
   async logout(userId: string, refreshToken: string, res: Response) {

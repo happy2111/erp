@@ -5,7 +5,7 @@ import {
   Post,
   Delete,
   Param,
-  UseGuards
+  UseGuards, Query, Patch
 } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 import { PrismaTenantService } from "../prisma_tenant/prisma_tenant.service";
@@ -16,6 +16,8 @@ import {RolesGuard} from "../auth/guards/roles.guard";
 import {Roles} from "../auth/decorators/roles.decorator";
 import {UserId} from "../auth/decorators/user-id.decorator";
 import {ApiBearerAuth} from "@nestjs/swagger";
+import {TenantFilterDto} from "./dto/filter-tenant.dto";
+import {UpdateTenantDto} from "./dto/update-tenant.dto";
 
 @ApiBearerAuth()
 @Controller('tenant')
@@ -31,11 +33,15 @@ export class TenantsController {
     return this.tenantsService.createTenant(dto.name, dto.ownerId, dto.hostname);
   }
 
+
+  @Get('filter')
   @Get('all')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.PLATFORM_OWNER)
-  findAll() {
-    return this.tenantsService.findAll();
+  async findAll(
+    @Query() query: TenantFilterDto
+  ) {
+    return this.tenantsService.filterTenants(query);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -73,35 +79,14 @@ export class TenantsController {
     return this.tenantsService.updateAllTenantDatabases();
   }
 
-  // === Работа с данными тенанта через API Key ===
+  @Patch('update/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PLATFORM_OWNER)
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateTenantDto,
+  ) {
+    return this.tenantsService.update(id, dto);
+  }
 
-  // @Post('products')
-  // @UseGuards(ApiKeyGuard)
-  // addProduct(
-  //   @CurrentTenant() tenant: Tenant,
-  //   @Body() productData: any
-  // ) {
-  //   return this.PrismaTenantService.addProduct(tenant.id, productData);
-  // }
-  //
-  // @Get('products')
-  // @UseGuards(ApiKeyGuard)
-  // getProducts(@CurrentTenant() tenant: Tenant) {
-  //   return this.PrismaTenantService.getProducts(tenant.id);
-  // }
-  //
-  // @Post('customers')
-  // @UseGuards(ApiKeyGuard)
-  // addCustomer(
-  //   @CurrentTenant() tenant: Tenant,
-  //   @Body() customerData: any
-  // ) {
-  //   return this.PrismaTenantService.addCustomer(tenant.id, customerData);
-  // }
-  //
-  // @Get('customers')
-  // @UseGuards(ApiKeyGuard)
-  // getCustomers(@CurrentTenant() tenant: Tenant) {
-  //   return this.PrismaTenantService.getCustomers(tenant.id);
-  // }
 }

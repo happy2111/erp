@@ -4,7 +4,7 @@ import {
   Delete,
   Get,
   Param,
-  Post,
+  Post, Query,
   UseGuards
 } from '@nestjs/common';
 import {MainUserService} from "./main-user.service";
@@ -13,6 +13,7 @@ import {JwtAuthGuard} from "../auth/guards/jwt-auth.guard";
 import {RolesGuard} from "../auth/guards/roles.guard";
 import {Roles} from "../auth/decorators/roles.decorator";
 import {UserRole} from "@prisma/client";
+import {UserFilterDto} from "./dto/filter-main-user.dto";
 
 @Controller('main-user')
 export class MainUserController {
@@ -25,11 +26,13 @@ export class MainUserController {
     return this.mainUserService.createUser(dto);
   }
 
-  @Get("all")
+  @Get("filter")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.PLATFORM_OWNER)
-  async findAll() {
-    return this.mainUserService.findAll();
+  async findAll(
+    @Query() query: UserFilterDto
+  ) {
+    return this.mainUserService.filterUsers(query);
   }
 
   @Get(":id")
@@ -46,6 +49,8 @@ export class MainUserController {
   async delete(@Param('id') id: string) {
     return this.mainUserService.delete(id);
   }
+
+
 
 
 }
