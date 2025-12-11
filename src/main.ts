@@ -7,7 +7,7 @@ import {TransformInterceptor} from "./interceptors/response.interceptor";
 import {AllExceptionsFilter} from "./common/filters/http-exception.filter";
 import {DocumentBuilder, SwaggerModule} from "@nestjs/swagger";
 import cookieParser from 'cookie-parser';
-import {PrismaExceptionFilter} from "./common/filters/prisma-exception.filter"; // 👈 Импортируем
+import {PrismaExceptionFilter} from "./common/filters/prisma-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -21,14 +21,13 @@ async function bootstrap() {
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,       // удаляет лишние поля из body
-      forbidNonWhitelisted: true, // выбрасывает ошибку если есть лишние поля
-      transform: true,       // автоматически преобразует типы (string -> number)
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
 
-  // Serve static files from the docs folder under the /schema/doc path
   app.useStaticAssets(join(process.cwd(), 'docs'), {
     prefix: '/schema/doc',
   });

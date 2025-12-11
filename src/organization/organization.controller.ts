@@ -19,6 +19,9 @@ import {JwtAuthGuard} from "../tenant-auth/guards/jwt.guard";
 import {TenantRolesGuard} from "../guards/tenant-roles.guard";
 import {Roles} from "../auth/decorators/roles.decorator";
 import {OrgUserRole} from ".prisma/client-tenant";
+import {
+  CurrentUser
+} from "../tenant-auth/decorators/current-tenant-user.decorator";
 
 @ApiSecurity('x-tenant-key')
 @Controller('organization')
@@ -33,18 +36,41 @@ export class OrganizationController {
   }
 
 
-  @Get("all")
+  @Get("admin/all")
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  findAll(@CurrentTenant() tenant: Tenant) {
+  adminfindAll(@CurrentTenant() tenant: Tenant) {
     return this.organizationService.findAll(tenant);
   }
 
 
-  @Get(':id')
+  @Get('admin/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
+  adminfindOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
     return this.organizationService.findById(tenant, id);
   }
+
+
+  @Get("all")
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  findAll(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.organizationService.findAllForUser(tenant, user.sub);
+  }
+
+  @Get(':id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  async findOne(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentUser() user: { sub: string },
+    @Param('id') id: string,
+  ) {
+    return this.organizationService.findOneForUser(tenant, user.sub, id);
+  }
+
+
+
 
   @Patch('update/:id')
   @ApiOperation({ summary: 'Update organization partially' })

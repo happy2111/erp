@@ -8,7 +8,6 @@ import {
   UseGuards, Query, Patch
 } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
-import { PrismaTenantService } from "../prisma_tenant/prisma_tenant.service";
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UserRole} from '@prisma/client';
 import {JwtAuthGuard} from "../auth/guards/jwt-auth.guard";

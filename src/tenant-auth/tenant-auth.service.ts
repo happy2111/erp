@@ -165,7 +165,7 @@ export class TenantAuthService {
     this.setCookie(res, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
     return {
-      accessToken,
+      accessToken ,
       user: this.serializeUser(user, role),
       apiKey: tenant.apiKey
     };

@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import {PrismaService} from "../prisma/prisma.service";
@@ -17,13 +21,65 @@ export class OrganizationService {
     ) {
   }
 
-  create(tenant: Tenant, createOrganizationDto: CreateOrganizationDto) {
+  async create(tenant: Tenant, createOrganizationDto: CreateOrganizationDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
     return client.organization.create({
       data: createOrganizationDto,
     })
   }
 
+  async findAllForUser(tenant: Tenant, userId: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    return client.organization.findMany({
+      where: {
+        org_users: {
+          some: {
+            userId: userId,
+          },
+        },
+      },
+      include: {
+        org_users: {
+          where: { userId },
+          select: { role: true, position: true },
+        },
+        settings: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findOneForUser(tenant: Tenant, userId: string, orgId: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const org = await client.organization.findFirst({
+      where: {
+        id: orgId,
+        org_users: {
+          some: {
+            userId: userId,
+          },
+        },
+      },
+      include: {
+        org_users: {
+          where: { userId },
+          select: { role: true, position: true },
+        },
+        settings: true,
+        kassas: true,
+        // что нужно
+      },
+    });
+
+    if (!org) {
+      throw new NotFoundException('Organization not found or access denied');
+    }
+
+    return org;
+  }
 
 
   findAll(tenant: Tenant) {

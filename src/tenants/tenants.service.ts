@@ -85,8 +85,9 @@ export class TenantsService {
 
       const organization = await this.organization.create(tenant, { name: 'Test' });
 
+      let tenantUser:CreateTenantUserDto;
       if (owner) {
-        const tenantUser: CreateTenantUserDto = {
+        tenantUser = {
           ...(owner.email ? { email: owner.email } : {}),
           password: owner.password,
           profile: {
@@ -99,16 +100,31 @@ export class TenantsService {
               isPrimary: true,
             },
           ],
-        };
-
-        await this.organizationUserService.createWithTenantUser(
-          tenant,
-          organization.id,
-          OrgUserRole.OWNER,
-          undefined,
-          tenantUser
-        );
+        }
+      } else {
+        tenantUser = {
+          email: "test@erp.uz",
+          password: "12345678",
+          profile: {
+            firstName: "Happy",
+            lastName: "Tester"
+          },
+          phone_numbers: [
+            {
+              phone: "+998991231212",
+              isPrimary: true,
+            }
+          ]
+        }
       }
+
+      await this.organizationUserService.createWithTenantUser(
+        tenant,
+        organization.id,
+        OrgUserRole.OWNER,
+        undefined,
+        tenantUser
+      );
 
       return tenant;
     } catch (error) {

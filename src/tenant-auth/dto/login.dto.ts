@@ -22,5 +22,4 @@ export class TenantLoginDto {
   @IsString()
   @Length(8, 255)
   password: string;
-
 }

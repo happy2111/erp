@@ -51,8 +51,4 @@ export class TenantAuthController {
     res.clearCookie('refreshToken');
     return { message: 'Logout successful' };
   }
-
-
-
-
 }
