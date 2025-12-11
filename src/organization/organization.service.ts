@@ -1,18 +1,12 @@
 import {
-  BadRequestException,
   Injectable,
   NotFoundException
 } from '@nestjs/common';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
-import {PrismaService} from "../prisma/prisma.service";
 import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
 import { Tenant } from "@prisma/client";
-import {CreateTenantUserDto} from "../tenant-user/dto/create-tenant-user.dto";
-import {TenantUserService} from "../tenant-user/tenant-user.service";
-import {
-  CreateOrganizationUserDto
-} from "../organization-user/dto/create-org-user.dto";
+import {GetOrganizationsQueryDto} from "./dto/get-organizations-query.dto";
 
 @Injectable()
 export class OrganizationService {
@@ -82,11 +76,29 @@ export class OrganizationService {
   }
 
 
-  findAll(tenant: Tenant) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant)
+  async findAll(tenant: Tenant, query: GetOrganizationsQueryDto) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    return client.organization.findMany()
+    const { search, order = "desc", sortField = "createdAt" } = query;
+
+    return client.organization.findMany({
+      where: search
+        ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { phone: { contains: search, mode: "insensitive" } },
+          ],
+        }
+        : undefined,
+
+      orderBy: {
+        [sortField]: order,
+      },
+    });
   }
+
+
 
   findById(tenant: Tenant, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant)

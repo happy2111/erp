@@ -67,9 +67,8 @@ export class OrganizationUserService {
   async filter(tenant: Tenant, dto: OrgUserFilterDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const take = dto.page;
+    const take = dto.limit; // dto.limit - сколько элементов на странице
     const skip = (dto.page - 1) * dto.limit;
-
 
     const where: Prisma.OrganizationUserWhereInput = {};
 
@@ -81,27 +80,61 @@ export class OrganizationUserService {
       where.role = dto.role;
     }
 
+    if (dto.search) {
+      // Пример поиска по имени пользователя или позиции
+      where.OR = [
+        { user: { profile: { firstName: { contains: dto.search, mode: 'insensitive' } } } },
+        { user: { profile: { lastName: { contains: dto.search, mode: 'insensitive' } } } },
+        { position: { contains: dto.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const orderByField = dto.sortBy || 'createdAt';
+    const orderDirection = dto.sortOrder || 'desc';
+
+    // @ts-ignore
     const [data, total] = await client.$transaction([
       client.organizationUser.findMany({
         where,
         take,
         skip,
-        // Optional: Include related data like 'organization' and 'user'
         include: {
           organization: true,
-          user: true,
+          user: {
+            select: {
+              id: true,
+              email: true,
+              isActive: true,
+              profile: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  gender: true,
+
+                }
+              },
+              phone_numbers: true
+            }
+          },
         },
         orderBy: {
-          createdAt: 'desc', // Example: Order by creation date descending
-        }
+          [orderByField]: orderDirection,
+        },
       }),
       client.organizationUser.count({
         where,
       }),
     ]);
 
-
+    return {
+      data,
+      total,
+      page: dto.page,
+      limit: dto.limit,
+      totalPages: Math.ceil(total / dto.limit),
+    };
   }
+
 
   // async update(
   //   tenant: Tenant,

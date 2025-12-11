@@ -6,7 +6,7 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards
+  UseGuards, Query
 } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
@@ -22,6 +22,7 @@ import {OrgUserRole} from ".prisma/client-tenant";
 import {
   CurrentUser
 } from "../tenant-auth/decorators/current-tenant-user.decorator";
+import {GetOrganizationsQueryDto} from "./dto/get-organizations-query.dto";
 
 @ApiSecurity('x-tenant-key')
 @Controller('organization')
@@ -38,8 +39,11 @@ export class OrganizationController {
 
   @Get("admin/all")
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  adminfindAll(@CurrentTenant() tenant: Tenant) {
-    return this.organizationService.findAll(tenant);
+  adminfindAll(
+    @CurrentTenant() tenant: Tenant,
+    @Query() query: GetOrganizationsQueryDto
+  ) {
+    return this.organizationService.findAll(tenant, query);
   }
 
 
