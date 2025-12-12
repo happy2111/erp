@@ -1,6 +1,6 @@
 import {
-  BadRequestException,
-  Injectable,
+  BadRequestException, ConflictException,
+  Injectable, InternalServerErrorException,
   NotFoundException
 } from '@nestjs/common';
 import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
@@ -11,12 +11,13 @@ import {OrgUserFilterDto} from "./dto/org-user-filter.dto";
 import {TenantUserService} from "../tenant-user/tenant-user.service";
 import {CreateTenantUserDto} from "../tenant-user/dto/create-tenant-user.dto";
 import {UpdateOrganizationUserDto} from "./dto/update-organization-user.dto";
+import {CreateOrgUserWithUserDto} from "./dto/create-org_user-with-user.dto";
 
 @Injectable()
 export class OrganizationUserService {
   constructor(
     private readonly prismaTenant: PrismaTenantService,
-    private readonly tenantUserService: TenantUserService
+    private readonly tenantUserService: TenantUserService,
   ) {
   }
 
@@ -28,6 +29,74 @@ export class OrganizationUserService {
       }
     })
   }
+
+  async createWithUser(dto: CreateOrgUserWithUserDto, tenant: Tenant) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const organization = await client.organization.findUnique({
+      where: { id: dto.organizationId },
+    });
+
+    if (!organization) {
+      throw new NotFoundException("Organization not found");
+    }
+
+    if (dto.user.email) {
+      const existingUserEmail = await client.user.findUnique({
+        where: { email: dto.user.email },
+      });
+
+      if (existingUserEmail) {
+        throw new ConflictException("User with this email already exists");
+      }
+    }
+
+    if (dto.user.phone_numbers?.length) {
+      for (const phone of dto.user.phone_numbers) {
+        const existingPhone = await client.userPhone.findUnique({
+          where: { phone: phone.phone },
+        });
+
+        if (existingPhone) {
+          throw new ConflictException(
+            `Phone number ${phone.phone} already exists`
+          );
+        }
+      }
+    }
+
+    const createdUser = await this.tenantUserService.create(tenant, dto.user);
+
+    if (!createdUser) {
+      throw new InternalServerErrorException("Failed to create user");
+    }
+
+    // const existingOrgUser = await client.organizationUser.findUnique({
+    //   where: {
+    //     organizationId_userId: {
+    //       organizationId: dto.organizationId,
+    //       userId: createdUser.id,
+    //     },
+    //   },
+    // });
+    //
+    // if (existingOrgUser) {
+    //   throw new ConflictException(
+    //     "This user already assigned to this organization"
+    //   );
+    // }
+
+    return client.organizationUser.create({
+      data: {
+        organizationId: dto.organizationId,
+        role: dto.role,
+        position: dto.position,
+        userId: createdUser.id,
+      },
+    });
+  }
+
+
 
   async createWithTenantUser(
     tenant: Tenant,

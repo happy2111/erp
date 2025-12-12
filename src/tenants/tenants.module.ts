@@ -10,5 +10,6 @@ import {
   imports: [OrganizationModule, OrganizationUserModule],
   controllers: [TenantsController],
   providers: [TenantsService],
+  exports: [TenantsService]
 })
 export class TenantsModule {}

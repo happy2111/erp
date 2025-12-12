@@ -1,12 +1,11 @@
-// create-tenant-user.dto.ts
 import {
   IsEmail,
   IsOptional,
   IsString,
   ValidateNested,
   IsBoolean,
-  IsArray, // <-- Нужен для валидации массива
-  ArrayMinSize, Length, Matches, // <-- Полезно, если требуется хотя бы один номер
+  IsArray,
+  ArrayMinSize, Length, Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';

@@ -30,6 +30,7 @@ import {UpdateOrganizationUserDto} from "./dto/update-organization-user.dto";
 import {
   CurrentUser
 } from "../tenant-auth/decorators/current-tenant-user.decorator";
+import {CreateOrgUserWithUserDto} from "./dto/create-org_user-with-user.dto";
 
 @ApiSecurity('x-tenant-key')
 @ApiSecurity('Authorization')
@@ -42,6 +43,13 @@ export class OrganizationUserController {
   @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   async create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateOrganizationUserDto) {
     return await this.organizationUserService.create(tenant, dto);
+  }
+
+  @Post('create-with-user')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  async createWithUser(@CurrentTenant() tenant: Tenant, @Body() dto: CreateOrgUserWithUserDto) {
+    return await this.organizationUserService.createWithUser(dto, tenant)
   }
 
   @Post('filter')

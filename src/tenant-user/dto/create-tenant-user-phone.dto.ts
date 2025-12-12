@@ -10,6 +10,7 @@ import {
 import {ApiProperty} from "@nestjs/swagger";
 
 export class CreateUserPhoneDto {
+  @IsOptional()
   @IsUUID()
   userid?: string;
 

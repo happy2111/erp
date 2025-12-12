@@ -5,7 +5,7 @@ import {TenantAuthModule} from "../tenant-auth/tenant-auth.module";
 import {TenantUserModule} from "../tenant-user/tenant-user.module";
 
 @Module({
-  imports: [TenantAuthModule, TenantUserModule],
+  imports: [TenantAuthModule, TenantUserModule, TenantUserModule],
   controllers: [OrganizationUserController],
   providers: [OrganizationUserService],
   exports: [OrganizationUserService],
