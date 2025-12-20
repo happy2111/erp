@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -26,6 +26,8 @@ import { ProductBatchModule } from './product-batch/product-batch.module';
 import { ProductInstanceModule } from './product-instance/product-instance.module';
 import { ProductTransactionModule } from './product-transaction/product-transaction.module';
 import { MainUserRefreshTokenModule } from './main-user-refresh-token/main-user-refresh-token.module';
+import { LoggerMiddleware } from './common/middleware/logger.middleware';
+import { S3Module } from './s3/s3.module';
 
 @Module({
   imports: [
@@ -56,8 +58,13 @@ import { MainUserRefreshTokenModule } from './main-user-refresh-token/main-user-
     ProductInstanceModule,
     ProductTransactionModule,
     MainUserRefreshTokenModule,
+    S3Module,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*');
+  }
+}
