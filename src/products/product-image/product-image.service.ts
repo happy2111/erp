@@ -1,8 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Tenant } from '@prisma/client';
 import { S3Service } from 'src/s3/s3.service';
 import { PrismaTenantService } from '../../prisma_tenant/prisma_tenant.service';
-
 
 @Injectable()
 export class ProductImagesService {
@@ -23,6 +26,10 @@ export class ProductImagesService {
       where: { id: productId },
     });
     if (!product) throw new NotFoundException('Товар не найден');
+
+    if (!file) {
+      throw new BadRequestException('Файл не передан');
+    }
 
     const key = `products/${productId}/${Date.now()}-${file.originalname}`;
 

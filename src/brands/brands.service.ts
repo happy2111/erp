@@ -2,31 +2,34 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException
+  NotFoundException,
 } from '@nestjs/common';
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
-import {Prisma} from ".prisma/client-tenant";
-import {Tenant} from "@prisma/client";
-import {CreateBrandDto} from "./dto/create-brand.dto";
-import { BrandFilterDto } from "./dto/filter-brand.dto";
-import {UpdateBrandDto} from "./dto/update-brand.dto";
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import { Prisma } from '.prisma/client-tenant';
+import { Tenant } from '@prisma/client';
+import { CreateBrandDto } from './dto/create-brand.dto';
+import { BrandFilterDto } from './dto/filter-brand.dto';
+import { UpdateBrandDto } from './dto/update-brand.dto';
 
 @Injectable()
-export class BrandsService {
+class BrandsService {
   constructor(private readonly prismaTenant: PrismaTenantService) {}
+
 
   async create(tenant: Tenant, dto: CreateBrandDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
     const exists = await client.brand.findUnique({ where: { name: dto.name } });
+
     if (exists) {
-      throw new ConflictException(`Бренд с именем "${dto.name}" уже существует`);
+      throw new ConflictException(
+        `Бренд с именем "${dto.name}" уже существует`,
+      );
     }
 
-    const brand = await client.brand.create({
+    return client.brand.create({
       data: { name: dto.name },
     });
-
-    return brand;
   }
 
   async findAll(tenant: Tenant, filter: BrandFilterDto) {
@@ -80,9 +83,13 @@ export class BrandsService {
     if (!brand) throw new NotFoundException('Бренд не найден');
 
     if (dto.name) {
-      const existing = await client.brand.findUnique({ where: { name: dto.name } });
+      const existing = await client.brand.findUnique({
+        where: { name: dto.name },
+      });
       if (existing && existing.id !== id) {
-        throw new ConflictException(`Бренд с именем "${dto.name}" уже существует`);
+        throw new ConflictException(
+          `Бренд с именем "${dto.name}" уже существует`,
+        );
       }
     }
 
@@ -103,10 +110,13 @@ export class BrandsService {
       return { message: 'Бренд успешно удалён' };
     } catch (e: any) {
       if (e.code === 'P2003') {
-        throw new BadRequestException('Невозможно удалить бренд: существуют связанные товары');
+        throw new BadRequestException(
+          'Невозможно удалить бренд: существуют связанные товары',
+        );
       }
       throw e;
     }
   }
-
 }
+
+export default BrandsService;
