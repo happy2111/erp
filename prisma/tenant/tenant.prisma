@@ -271,6 +271,24 @@ model Brand {
   @@map("brands")
 }
 
+model ProductImage {
+  id               String  @id @default(uuid())
+  productId        String? @map("product_id")
+  productVariantId String? @map("product_variant_id")
+
+  url       String /* URL изображения (S3, CDN, локально) */
+  alt       String? /* alt-текст */
+  isPrimary Boolean @default(false) /* главное изображение */
+  sortOrder Int     @default(0) /* порядок отображения */
+
+  product        Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("product_images")
+}
+
 /**
  * Таблица продуктов (products) — хранит информацию о товарах, принадлежащих организациям.
  */
@@ -290,6 +308,7 @@ model Product {
   updatedAt    DateTime          @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
   variants ProductVariant[]
+  images   ProductImage[] /* Изображения товара */
 
   @@map("products") /* Имя таблицы в базе данных */
 }
@@ -318,6 +337,7 @@ model ProductVariant {
   stocks          Stock[] /* Остатки товара на складе */
   purchase_items  PurchaseItem[] /* Закупки, связанные с этим товаром */
   sele_items      SaleItem[] /* Продажи, в которых участвовал данный товар */
+  images          ProductImage[] /* Изображения варианта товара */
 
   @@map("product_variants") /* Название таблицы в базе данных */
 }

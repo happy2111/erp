@@ -6,5 +6,5 @@ export default registerAs('s3', () => ({
   region: process.env.S3_REGION ?? 'us-east-1',
   accessKeyId: process.env.S3_ACCESS_KEY ?? 'admin',
   secretAccessKey: process.env.S3_SECRET_KEY ?? 'password123',
-  bucket: process.env.S3_BUCKET ?? 'my-bucket',
+  bucket: process.env.S3_BUCKET ?? 'erp-bucket',
 }));
