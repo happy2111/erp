@@ -4,15 +4,15 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
-  type PutObjectCommandOutput,
-  type DeleteObjectCommandOutput,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import s3Config from './s3.config';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export interface UploadFileParams {
   key: string;
-  body: Buffer;
   contentType?: string;
+  expiresIn?: number; // время жизни presigned URL в секундах
 }
 
 @Injectable()
@@ -37,31 +37,51 @@ export class S3Service {
     this.bucket = this.config.bucket;
   }
 
-  async uploadFile(params: UploadFileParams): Promise<{ url: string }> {
+  /**
+   * Генерация presigned URL для загрузки файла
+   */
+  async getUploadUrl(params: UploadFileParams): Promise<{ url: string }> {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: params.key,
-      Body: params.body,
       ContentType: params.contentType,
     });
 
-    const _: PutObjectCommandOutput = await this.s3.send(command);
+    const url = await getSignedUrl(this.s3, command, {
+      expiresIn: params.expiresIn ?? 3600, // по умолчанию 1 час
+    });
 
-    return {
-      url: `${this.bucket}/${params.key}`,
-    };
+    return { url };
   }
 
+  /**
+   * Генерация presigned URL для скачивания файла
+   */
+  async getDownloadUrl(key: string, expiresIn = 3600): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    return getSignedUrl(this.s3, command, { expiresIn });
+  }
+
+  /**
+   * Удаление по ключу
+   */
   async deleteByKey(key: string): Promise<void> {
     const command = new DeleteObjectCommand({
       Bucket: this.bucket,
       Key: key,
     });
 
-    const _: DeleteObjectCommandOutput = await this.s3.send(command);
+    await this.s3.send(command);
   }
 
-  deleteByUrl(url: string): Promise<void> {
+  /**
+   * Удаление по URL
+   */
+  async deleteByUrl(url: string): Promise<void> {
     const key = this.extractKeyFromUrl(url);
     return this.deleteByKey(key);
   }

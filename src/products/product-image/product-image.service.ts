@@ -14,10 +14,13 @@ export class ProductImagesService {
     private readonly s3Service: S3Service,
   ) {}
 
-  async uploadProductImage(
+  /**
+   * Генерация presigned URL для загрузки изображения товара
+   */
+  async getUploadUrl(
     tenant: Tenant,
     productId: string,
-    file: Express.Multer.File,
+    filename: string,
     isPrimary = false,
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
@@ -27,18 +30,16 @@ export class ProductImagesService {
     });
     if (!product) throw new NotFoundException('Товар не найден');
 
-    if (!file) {
-      throw new BadRequestException('Файл не передан');
-    }
+    // Генерируем ключ в S3
+    const key = `products/${productId}/${Date.now()}-${filename}`;
 
-    const key = `products/${productId}/${Date.now()}-${file.originalname}`;
-
-    const { url } = await this.s3Service.uploadFile({
+    // Генерация presigned URL
+    const { url } = await this.s3Service.getUploadUrl({
       key,
-      body: file.buffer,
-      contentType: file.mimetype,
+      contentType: 'application/octet-stream', // фронтенд может потом подставить реальный Content-Type
     });
 
+    // Если isPrimary, сбросить у других
     if (isPrimary) {
       await client.productImage.updateMany({
         where: { productId, isPrimary: true },
@@ -46,15 +47,25 @@ export class ProductImagesService {
       });
     }
 
-    return client.productImage.create({
+    // Сохраняем запись в базе с ключом/URL
+    const image = await client.productImage.create({
       data: {
         productId,
         url,
         isPrimary,
       },
     });
+
+    return {
+      imageId: image.id,
+      uploadUrl: url, // фронтенд использует этот URL для PUT запроса
+      key,
+    };
   }
 
+  /**
+   * Удаление изображения
+   */
   async removeProductImage(tenant: Tenant, imageId: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
@@ -68,6 +79,9 @@ export class ProductImagesService {
     return client.productImage.delete({ where: { id: imageId } });
   }
 
+  /**
+   * Список изображений
+   */
   async listProductImages(tenant: Tenant, productId: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 

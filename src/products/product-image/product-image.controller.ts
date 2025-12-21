@@ -2,21 +2,13 @@ import {
   Controller,
   Post,
   UseGuards,
-  UploadedFile,
-  UseInterceptors,
   Param,
   Delete,
   Get,
   Body,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductImagesService } from './product-image.service';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiParam,
-  ApiSecurity,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiSecurity } from '@nestjs/swagger';
 import { OrgUserRole } from '.prisma/client-tenant';
 import type { Tenant } from '@prisma/client';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
@@ -33,22 +25,27 @@ import { CurrentTenant } from '../../decorators/currectTenant.decorator';
 export class ProductImagesController {
   constructor(private readonly imagesService: ProductImagesService) {}
 
-  @Post(':productId')
+  /**
+   * Генерация presigned URL для загрузки изображения товара
+   */
+  @Post(':productId/presign')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiOperation({ summary: 'Загрузить изображение товара' })
+  @ApiOperation({ summary: 'Получить presigned URL для загрузки изображения' })
   @ApiParam({ name: 'productId', description: 'ID товара' })
-  upload(
+  getPresignUrl(
     @CurrentTenant() tenant: Tenant,
     @Param('productId') productId: string,
-    @UploadedFile() file: Express.Multer.File,
-    @Body() dto: CreateProductImageDto,
+    @Body() dto: CreateProductImageDto & { filename: string },
   ) {
-    return this.imagesService.uploadProductImage(
+    if (!dto.filename) {
+      throw new BadRequestException('Не указан filename');
+    }
+
+    return this.imagesService.getUploadUrl(
       tenant,
       productId,
-      file,
+      dto.filename,
       dto.isPrimary,
     );
   }
