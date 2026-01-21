@@ -96,8 +96,6 @@ export class OrganizationUserService {
     });
   }
 
-
-
   async createWithTenantUser(
     tenant: Tenant,
     organizationId: string,

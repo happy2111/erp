@@ -14,7 +14,6 @@ import {TenantLoginDto} from "./dto/login.dto";
 @Controller('tenant-auth')
 export class TenantAuthController {
   constructor(
-    private readonly tenantAuthService: TenantAuthService,
     private readonly prisma: PrismaService,
     private readonly authService: TenantAuthService,) {
 

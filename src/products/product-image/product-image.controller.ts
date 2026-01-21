@@ -5,7 +5,7 @@ import {
   Param,
   Delete,
   Get,
-  Body,
+  Body, BadRequestException,
 } from '@nestjs/common';
 import { ProductImagesService } from './product-image.service';
 import { ApiTags, ApiOperation, ApiParam, ApiSecurity } from '@nestjs/swagger';
