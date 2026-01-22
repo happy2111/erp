@@ -63,6 +63,7 @@ export class SalesService {
 
         const total = new Prisma.Decimal(item.quantity).mul(item.price);
 
+        // TODO
         // Опционально: проверка остатка на складе
         // const stock = await client.stock.findFirst({
         //   where: { organizationId: tenant.id, productVariantId: item.productVariantId },

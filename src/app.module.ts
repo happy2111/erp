@@ -33,6 +33,7 @@ import { KassaTransfersModule } from './kassa-transfers/kassa-transfers.module';
 import { SalesModule } from './sales/sales.module';
 import { StocksModule } from './stocks/stocks.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PurchasesModule } from './purchases/purchases.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { PaymentsModule } from './payments/payments.module';
     SalesModule,
     StocksModule,
     PaymentsModule,
+    PurchasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
