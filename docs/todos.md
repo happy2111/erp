@@ -29,12 +29,12 @@
 
 - [X] ProductInstancesModule (серийные номера, статусы экземпляров)
 - [X] ProductBatchesModule (партии, сроки годности)
-- [ ] StocksModule (остатки по organization + variant)
+- [x] StocksModule (остатки по organization + variant)
 
 ## Финансы и кассы
 
-- [ ] KassasModule (кассы организации)
-- [ ] KassaTransfersModule (переводы между кассами)
+- [x] KassasModule (кассы организации)
+- [x] KassaTransfersModule (переводы между кассами)
 
 ## Клиенты и контрагенты
 

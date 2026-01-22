@@ -28,6 +28,8 @@ import { ProductTransactionModule } from './product-transaction/product-transact
 import { MainUserRefreshTokenModule } from './main-user-refresh-token/main-user-refresh-token.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { S3Module } from './s3/s3.module';
+import { KassasModule } from './kassas/kassas.module';
+import { KassaTransfersModule } from './kassa-transfers/kassa-transfers.module';
 
 @Module({
   imports: [
@@ -59,6 +61,8 @@ import { S3Module } from './s3/s3.module';
     ProductTransactionModule,
     MainUserRefreshTokenModule,
     S3Module,
+    KassasModule,
+    KassaTransfersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
