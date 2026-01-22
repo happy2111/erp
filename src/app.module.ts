@@ -30,6 +30,8 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { S3Module } from './s3/s3.module';
 import { KassasModule } from './kassas/kassas.module';
 import { KassaTransfersModule } from './kassa-transfers/kassa-transfers.module';
+import { SalesModule } from './sales/sales.module';
+import { StocksModule } from './stocks/stocks.module';
 
 @Module({
   imports: [
@@ -63,6 +65,8 @@ import { KassaTransfersModule } from './kassa-transfers/kassa-transfers.module';
     S3Module,
     KassasModule,
     KassaTransfersModule,
+    SalesModule,
+    StocksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -29,7 +29,7 @@
 
 - [X] ProductInstancesModule (серийные номера, статусы экземпляров)
 - [X] ProductBatchesModule (партии, сроки годности)
-- [x] StocksModule (остатки по organization + variant)
+- [X] StocksModule (остатки по organization + variant)
 
 ## Финансы и кассы
 
@@ -42,7 +42,7 @@
 
 ## Основные бизнес-процессы
 
-- [ ] SalesModule + SaleItems (продажи + позиции)
+- [x] SalesModule + SaleItems (продажи + позиции)
 - [ ] PaymentsModule (платежи — приход/расход/перевод)
 - [ ] PurchasesModule + PurchaseItems (закупки + позиции)
 - [ ] InstallmentsModule + InstallmentPayments (рассрочки)

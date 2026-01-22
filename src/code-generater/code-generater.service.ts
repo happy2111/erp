@@ -1,8 +1,7 @@
 // src/code-generator/code-generator.service.ts
 import { Injectable } from '@nestjs/common';
 import { Tenant } from '@prisma/client';
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
-
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 
 interface CodeGenerationOptions {
   /** Префикс, например, 'PRD' для продукта, 'INV' для инвойса. */
