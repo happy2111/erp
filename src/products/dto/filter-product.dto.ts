@@ -2,7 +2,10 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class ProductFilterDto {
-  @ApiPropertyOptional({ example: 'iPhone', description: 'Поиск по названию товара' })
+  @ApiPropertyOptional({
+    example: 'iPhone',
+    description: 'Поиск по названию товара',
+  })
   @IsOptional()
   @IsString()
   search?: string;

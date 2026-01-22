@@ -80,6 +80,7 @@ export class TenantAuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    //TODO почему оно не используется ?
     const apiKey = tenant.apiKey
     return this.auth(res, user, tenant, orgUser.role)
   }

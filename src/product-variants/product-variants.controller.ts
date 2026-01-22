@@ -32,23 +32,36 @@ import { OrgUserRole } from '.prisma/client-tenant';
 @ApiSecurity('Authorization')
 @Controller('product-variants')
 export class ProductVariantsController {
-  constructor(private readonly productVariantsService: ProductVariantsService) {}
+  constructor(
+    private readonly productVariantsService: ProductVariantsService,
+  ) {}
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   @ApiOperation({ summary: 'Создать новый вариант товара' })
   @ApiResponse({ status: 201, description: 'Вариант успешно создан' })
-  @ApiResponse({ status: 409, description: 'Вариант с таким SKU или штрихкодом уже существует' })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateProductVariantDto) {
+  @ApiResponse({
+    status: 409,
+    description: 'Вариант с таким SKU или штрихкодом уже существует',
+  })
+  create(
+    @CurrentTenant() tenant: Tenant,
+    @Body() dto: CreateProductVariantDto,
+  ) {
     return this.productVariantsService.create(tenant, dto);
   }
 
   @Post('filter')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить список вариантов товара с фильтрацией и пагинацией' })
+  @ApiOperation({
+    summary: 'Получить список вариантов товара с фильтрацией и пагинацией',
+  })
   @ApiResponse({ status: 200, description: 'Список вариантов успешно получен' })
-  findAll(@CurrentTenant() tenant: Tenant, @Body() filter: ProductVariantFilterDto) {
+  findAll(
+    @CurrentTenant() tenant: Tenant,
+    @Body() filter: ProductVariantFilterDto,
+  ) {
     return this.productVariantsService.findAll(tenant, filter);
   }
 

@@ -15,7 +15,7 @@ import {
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
-import { BrandsService } from './brands.service';
+import BrandsService from './brands.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { BrandFilterDto } from './dto/filter-brand.dto';
@@ -41,7 +41,11 @@ export class BrandsController {
   @ApiResponse({
     status: 201,
     description: 'Бренд успешно создан',
-    example: { id: 'uuid-brand', name: 'Apple', createdAt: '2025-11-06T12:00:00Z' },
+    example: {
+      id: 'uuid-brand',
+      name: 'Apple',
+      createdAt: '2025-11-06T12:00:00Z',
+    },
   })
   @ApiResponse({ status: 409, description: 'Бренд с таким именем уже существует' })
   create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateBrandDto) {

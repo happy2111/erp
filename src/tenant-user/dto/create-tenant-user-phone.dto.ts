@@ -1,4 +1,3 @@
-// src/tenant-user/dto/create-user-phone.dto.ts
 import {
   IsBoolean,
   IsOptional,
@@ -20,7 +19,6 @@ export class CreateUserPhoneDto {
   })
   @IsString()
   @IsNotEmpty()
-  // Опционально: можно добавить более строгую проверку формата телефона
   @Matches(/^\+?[1-9]\d{1,14}$/, {
     message: 'Телефон должен быть в формате E.164 (например, +998901234567)'
   })
