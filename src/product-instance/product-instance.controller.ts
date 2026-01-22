@@ -47,7 +47,9 @@ export class ProductInstanceController {
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Создать новую экземпляр продукта (серийный номер)' })
+  @ApiOperation({
+    summary: 'Создать новую экземпляр продукта (серийный номер)',
+  })
   @ApiResponse({ status: 201, description: 'Экземпляр успешно создан' })
   create(
     @CurrentTenant() tenant: Tenant,
@@ -152,10 +154,7 @@ export class ProductInstanceController {
   @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   @ApiOperation({ summary: 'Переместить экземпляр между организациями' })
   @ApiResponse({ status: 200, description: 'Экземпляр успешно перемещён' })
-  transfer(
-    @CurrentTenant() tenant: Tenant,
-    @Body() dto: TransferInstanceDto,
-  ) {
+  transfer(@CurrentTenant() tenant: Tenant, @Body() dto: TransferInstanceDto) {
     return this.productInstanceService.transfer(tenant, dto);
   }
 
@@ -165,7 +164,9 @@ export class ProductInstanceController {
   @Post('resell')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Перепродать возвращённый/отремонтированный экземпляр' })
+  @ApiOperation({
+    summary: 'Перепродать возвращённый/отремонтированный экземпляр',
+  })
   @ApiResponse({ status: 200, description: 'Экземпляр успешно перепродан' })
   resell(@CurrentTenant() tenant: Tenant, @Body() dto: ResellInstanceDto) {
     return this.productInstanceService.resell(tenant, dto);

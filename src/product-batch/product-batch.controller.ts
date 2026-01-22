@@ -56,10 +56,7 @@ export class ProductBatchController {
       createdAt: '2025-11-06T12:00:00Z',
     },
   })
-  create(
-    @CurrentTenant() tenant: Tenant,
-    @Body() dto: CreateProductBatchDto,
-  ) {
+  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateProductBatchDto) {
     return this.productBatchService.create(tenant, dto);
   }
 
@@ -164,9 +161,14 @@ export class ProductBatchController {
   // ============================================================
   @Get('stats/:variantId')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Статистика партий для конкретного варианта продукта' })
+  @ApiOperation({
+    summary: 'Статистика партий для конкретного варианта продукта',
+  })
   @ApiParam({ name: 'variantId', description: 'ID варианта продукта' })
-  getStats(@CurrentTenant() tenant: Tenant, @Param('variantId') variantId: string) {
+  getStats(
+    @CurrentTenant() tenant: Tenant,
+    @Param('variantId') variantId: string,
+  ) {
     return this.productBatchService.getStats(tenant, variantId);
   }
 
@@ -174,7 +176,10 @@ export class ProductBatchController {
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
   @ApiOperation({ summary: 'Суммарное количество для варианта продукта' })
   @ApiParam({ name: 'variantId', description: 'ID варианта продукта' })
-  sumQuantity(@CurrentTenant() tenant: Tenant, @Param('variantId') variantId: string) {
+  sumQuantity(
+    @CurrentTenant() tenant: Tenant,
+    @Param('variantId') variantId: string,
+  ) {
     return this.productBatchService.sumQuantity(tenant, variantId);
   }
 }

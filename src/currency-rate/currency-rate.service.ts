@@ -12,7 +12,9 @@ export class CurrencyRateService {
 
   async create(tenant: Tenant, dto: CreateCurrencyRateDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    return client.currencyRate.create({ data: { ...dto, rate: new Prisma.Decimal(dto.rate) } });
+    return client.currencyRate.create({
+      data: { ...dto, rate: new Prisma.Decimal(dto.rate) },
+    });
   }
 
   async findAll(tenant: Tenant, filter: CurrencyRateFilterDto) {
@@ -25,7 +27,12 @@ export class CurrencyRateService {
     if (filter.targetCurrency) where.targetCurrency = filter.targetCurrency;
 
     const [data, total] = await client.$transaction([
-      client.currencyRate.findMany({ where, take, skip, orderBy: { date: 'desc' } }),
+      client.currencyRate.findMany({
+        where,
+        take,
+        skip,
+        orderBy: { date: 'desc' },
+      }),
       client.currencyRate.count({ where }),
     ]);
 
@@ -43,7 +50,13 @@ export class CurrencyRateService {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const exists = await client.currencyRate.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Курс не найден');
-    return client.currencyRate.update({ where: { id }, data: { ...dto, rate: dto.rate ? new Prisma.Decimal(dto.rate) : undefined } });
+    return client.currencyRate.update({
+      where: { id },
+      data: {
+        ...dto,
+        rate: dto.rate ? new Prisma.Decimal(dto.rate) : undefined,
+      },
+    });
   }
 
   async remove(tenant: Tenant, id: string) {

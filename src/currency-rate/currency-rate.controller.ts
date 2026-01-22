@@ -8,7 +8,13 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrencyRateService } from './currency-rate.service';
 import { CreateCurrencyRateDto } from './dto/create-currency-rate.dto';
 import { UpdateCurrencyRateDto } from './dto/update-currency-rate.dto';
@@ -56,7 +62,11 @@ export class CurrencyRateController {
   @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
   @ApiOperation({ summary: 'Обновить курс валют' })
   @ApiParam({ name: 'id', description: 'ID курса валют' })
-  update(@CurrentTenant() tenant: Tenant, @Param('id') id: string, @Body() dto: UpdateCurrencyRateDto) {
+  update(
+    @CurrentTenant() tenant: Tenant,
+    @Param('id') id: string,
+    @Body() dto: UpdateCurrencyRateDto,
+  ) {
     return this.currencyRateService.update(tenant, id, dto);
   }
 

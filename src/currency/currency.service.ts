@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
 import { Tenant } from '@prisma/client';
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 
 @Injectable()
 export class CurrencyService {
@@ -29,7 +29,11 @@ export class CurrencyService {
     });
   }
 
-  async update(tenant: Tenant, id: string, updateCurrencyDto: UpdateCurrencyDto) {
+  async update(
+    tenant: Tenant,
+    id: string,
+    updateCurrencyDto: UpdateCurrencyDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     return client.currency.update({
       where: { id },

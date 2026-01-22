@@ -1,7 +1,7 @@
 import {
   Injectable,
   NotFoundException,
-  BadRequestException
+  BadRequestException,
 } from '@nestjs/common';
 import { Tenant } from '@prisma/client';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
@@ -23,7 +23,7 @@ export class ProductBatchService {
     // Проверяем существование VARIANT
     const variant = await client.productVariant.findUnique({
       where: { id: dto.productVariantId }, // теперь здесь variantId
-      include: { product: { select: { organizationId: true } } }
+      include: { product: { select: { organizationId: true } } },
     });
 
     if (!variant) {
@@ -40,8 +40,8 @@ export class ProductBatchService {
         productVariantId: dto.productVariantId,
         batchNumber: dto.batchNumber,
         quantity: dto.quantity,
-        expiryDate: dto.expiryDate
-      }
+        expiryDate: dto.expiryDate,
+      },
     });
 
     // Обновляем остаток
@@ -49,7 +49,7 @@ export class ProductBatchService {
       client,
       variant.product.organizationId,
       variant.id,
-      dto.quantity
+      dto.quantity,
     );
 
     return batch;
@@ -72,13 +72,9 @@ export class ProductBatchService {
           search
             ? { batchNumber: { contains: search, mode: 'insensitive' } }
             : {},
-          productVariantId
-            ? { productVariantId }
-            : {},
-          isValid !== undefined
-            ? { isValid: isValid === 'true' }
-            : {}
-        ]
+          productVariantId ? { productVariantId } : {},
+          isValid !== undefined ? { isValid: isValid === 'true' } : {},
+        ],
       },
       include: {
         product_variant: {
@@ -86,17 +82,17 @@ export class ProductBatchService {
             id: true,
             title: true,
             sku: true,
-            product: { select: { name: true, code: true } }
-          }
-        }
+            product: { select: { name: true, code: true } },
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     const total = await client.productBatch.count({
       where: {
-        productVariantId
-      }
+        productVariantId,
+      },
     });
 
     return {
@@ -104,7 +100,7 @@ export class ProductBatchService {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -122,10 +118,10 @@ export class ProductBatchService {
             id: true,
             title: true,
             sku: true,
-            product: { select: { name: true, code: true } }
-          }
-        }
-      }
+            product: { select: { name: true, code: true } },
+          },
+        },
+      },
     });
 
     if (!batch) throw new NotFoundException('Batch not found');
@@ -144,10 +140,10 @@ export class ProductBatchService {
       include: {
         product_variant: {
           include: {
-            product: { select: { organizationId: true } }
-          }
-        }
-      }
+            product: { select: { organizationId: true } },
+          },
+        },
+      },
     });
 
     if (!existing) throw new NotFoundException('Batch not found');
@@ -159,13 +155,13 @@ export class ProductBatchService {
         client,
         existing.product_variant.id,
         existing.product_variant.product.organizationId,
-        diff
+        diff,
       );
     }
 
     return client.productBatch.update({
       where: { id },
-      data: dto
+      data: dto,
     });
   }
 
@@ -180,10 +176,10 @@ export class ProductBatchService {
       include: {
         product_variant: {
           include: {
-            product: { select: { organizationId: true } }
-          }
-        }
-      }
+            product: { select: { organizationId: true } },
+          },
+        },
+      },
     });
 
     if (!existing) throw new NotFoundException('Batch not found');
@@ -192,38 +188,38 @@ export class ProductBatchService {
       client,
       existing.product_variant.id,
       existing.product_variant.product.organizationId,
-      existing.quantity
+      existing.quantity,
     );
 
     return client.productBatch.delete({
-      where: { id }
+      where: { id },
     });
   }
 
   // ============================================================
   // STOCK LOGIC
   // ============================================================
-  private async updateStockOnCreate(
-    client:any,
+  private updateStockOnCreate(
+    client: any,
     organizationId: string,
     variantId: string,
-    qty: number
+    qty: number,
   ) {
     return client.stock.upsert({
       where: {
         organizationId_productVariantId: {
           organizationId,
-          productVariantId: variantId
-        }
+          productVariantId: variantId,
+        },
       },
       create: {
         organizationId,
         productVariantId: variantId,
-        quantity: qty
+        quantity: qty,
       },
       update: {
-        quantity: { increment: qty }
-      }
+        quantity: { increment: qty },
+      },
     });
   }
 
@@ -231,7 +227,7 @@ export class ProductBatchService {
     client: any,
     variantId: string,
     organizationId: string,
-    diff: number
+    diff: number,
   ) {
     if (diff === 0) return;
 
@@ -239,12 +235,12 @@ export class ProductBatchService {
       where: {
         organizationId_productVariantId: {
           productVariantId: variantId,
-          organizationId
-        }
+          organizationId,
+        },
       },
       data: {
-        quantity: { increment: diff }
-      }
+        quantity: { increment: diff },
+      },
     });
   }
 
@@ -252,18 +248,18 @@ export class ProductBatchService {
     client: any,
     variantId: string,
     organizationId: string,
-    qty: number
+    qty: number,
   ) {
     return client.stock.update({
       where: {
         organizationId_productVariantId: {
           productVariantId: variantId,
-          organizationId
-        }
+          organizationId,
+        },
       },
       data: {
-        quantity: { decrement: qty }
-      }
+        quantity: { decrement: qty },
+      },
     });
   }
 
@@ -274,20 +270,22 @@ export class ProductBatchService {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     const batches = await client.productBatch.findMany({
-      where: { productVariantId: variantId }
+      where: { productVariantId: variantId },
     });
 
     const totalQuantity = batches.reduce((s, b) => s + b.quantity, 0);
 
-
     const earliestExpiry = batches
-      .filter(b => b.expiryDate != null)
-      .sort((a, b) => (a.expiryDate as Date).getTime() - (b.expiryDate as Date).getTime())[0];
+      .filter((b) => b.expiryDate != null)
+      .sort(
+        (a, b) =>
+          (a.expiryDate as Date).getTime() - (b.expiryDate as Date).getTime(),
+      )[0];
 
     return {
       totalBatches: batches.length,
       totalQuantity,
-      nearestExpiry: earliestExpiry || null
+      nearestExpiry: earliestExpiry || null,
     };
   }
 
@@ -296,7 +294,7 @@ export class ProductBatchService {
 
     const sum = await client.productBatch.aggregate({
       where: { productVariantId: variantId },
-      _sum: { quantity: true }
+      _sum: { quantity: true },
     });
 
     return sum._sum.quantity || 0;

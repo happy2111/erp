@@ -1,4 +1,11 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -40,7 +47,7 @@ export class CreateProductInstanceDto {
   @ApiProperty({
     required: false,
     enum: ProductStatus,
-    description: 'Initial status of the product instance'
+    description: 'Initial status of the product instance',
   })
   @IsOptional()
   @IsEnum(ProductStatus)

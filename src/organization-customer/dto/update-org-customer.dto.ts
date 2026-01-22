@@ -1,4 +1,11 @@
-import { IsBoolean, IsEnum, IsOptional, IsPhoneNumber, IsString, Length } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsPhoneNumber,
+  IsString,
+  Length,
+} from 'class-validator';
 import { CustomerType } from '.prisma/client-tenant';
 
 export class UpdateOrgCustomerDto {
