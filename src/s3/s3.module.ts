@@ -7,6 +7,6 @@ import { S3Service } from './s3.service';
 @Module({
   imports: [ConfigModule.forFeature(s3Config)],
   providers: [S3Service],
-  exports: [S3Service], // чтобы можно было использовать в других модулях
+  exports: [S3Service],
 })
 export class S3Module {}

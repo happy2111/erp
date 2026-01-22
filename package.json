@@ -20,12 +20,15 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migrate:main:dev": "npx prisma migrate dev --schema=./prisma/main/schema.prisma",
     "migrate:tenant:dev": "npx prisma migrate dev --schema=./prisma/tenant/tenant.prisma",
+    "migrate:tenant:create": "npx prisma migrate dev --create-only --schema=./prisma/tenant/tenant.prisma",
     "generate:main": "npx prisma generate --schema=./prisma/main/schema.prisma",
     "generate:tenant": "npx prisma generate --schema=./prisma/tenant/tenant.prisma",
     "migrate:main:deploy": "npx prisma migrate deploy --schema=./prisma/main/schema.prisma",
     "migrate:tenant:deploy": "npx prisma migrate deploy --schema=./prisma/tenant/tenant.prisma",
     "studio:main": "npx prisma studio --schema=./prisma/main/schema.prisma",
-    "studio:tenant": "npx prisma studio --schema=./prisma/tenant/tenant.prisma"
+    "studio:tenant": "npx prisma studio --schema=./prisma/tenant/tenant.prisma",
+    "migrate:reset:tenant" : "npx prisma migrate reset --schema=./prisma/tenant/tenant.prisma",
+    "migrate:reset:main" : "npx prisma migrate reset --schema=./prisma/main/schema.prisma"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.956.0",

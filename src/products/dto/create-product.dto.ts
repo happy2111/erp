@@ -15,7 +15,11 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ example: 'uuid-brand', description: 'ID бренда', required: false })
+  @ApiProperty({
+    example: 'uuid-brand',
+    description: 'ID бренда',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   brandId?: string;
