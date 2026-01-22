@@ -14,6 +14,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiQuery,
+  ApiResponse,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
@@ -99,5 +100,43 @@ export class KassasController {
   @ApiParam({ name: 'id', description: 'ID кассы' })
   remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
     return this.kassasService.remove(tenant, id);
+  }
+
+  @Get(':id/history')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Получить историю операций по кассе (платежи, переводы)',
+  })
+  @ApiParam({ name: 'id', description: 'ID кассы' })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['INCOME', 'EXPENSE', 'TRANSFER'],
+  })
+  @ApiQuery({ name: 'fromDate', required: false, example: '2025-01-01' })
+  @ApiQuery({ name: 'toDate', required: false, example: '2025-12-31' })
+  @ApiResponse({
+    status: 200,
+    description: 'История операций по кассе',
+  })
+  @ApiResponse({ status: 404, description: 'Касса не найдена' })
+  getHistory(
+    @CurrentTenant() tenant: Tenant,
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('type') type?: 'INCOME' | 'EXPENSE' | 'TRANSFER',
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+  ) {
+    return this.kassasService.getKassaHistory(tenant, id, {
+      page: page ? +page : 1,
+      limit: limit ? +limit : 20,
+      type,
+      fromDate,
+      toDate,
+    });
   }
 }

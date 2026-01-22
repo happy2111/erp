@@ -144,4 +144,85 @@ export class KassasService {
       data: { balance: { increment: new Prisma.Decimal(delta) } },
     });
   }
+
+
+  async getKassaHistory(
+    tenant: Tenant,
+    kassaId: string,
+    filter: {
+      page?: number;
+      limit?: number;
+      type?: 'INCOME' | 'EXPENSE' | 'TRANSFER';
+      fromDate?: string;
+      toDate?: string;
+    } = {},
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const { page = 1, limit = 20, type, fromDate, toDate } = filter;
+
+    // Проверяем существование кассы
+    const kassa = await client.kassa.findFirst({
+      where: { id: kassaId, organizationId: tenant.id },
+    });
+    if (!kassa) throw new NotFoundException('Касса не найдена');
+
+    const where: Prisma.PaymentWhereInput = {
+      kassaId,
+      organizationId: tenant.id,
+    };
+
+    if (type) where.type = type;
+    if (fromDate || toDate) {
+      where.createdAt = {};
+      if (fromDate) where.createdAt.gte = new Date(fromDate);
+      if (toDate) where.createdAt.lte = new Date(toDate);
+    }
+
+    const [payments, total] = await Promise.all([
+      client.payment.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          currency: { select: { code: true, symbol: true } },
+          customer: {
+            select: { firstName: true, lastName: true, phone: true },
+          },
+          sale: {
+            select: { id: true, invoiceNumber: true, totalAmount: true },
+          },
+          purchase: {
+            select: { id: true, invoiceNumber: true, totalAmount: true },
+          },
+          // TODO
+          // Если нужно — можно добавить связь с KassaTransfer
+          // from_transfers: true,
+          // to_transfers: true,
+        },
+      }),
+      client.payment.count({ where }),
+    ]);
+
+    // Преобразуем Decimal → number
+    const transformed = payments.map((p) => ({
+      ...p,
+      amount: Number(p.amount),
+      // Если есть sale/purchase — тоже преобразуем суммы
+      sale: p.sale
+        ? { ...p.sale, totalAmount: Number(p.sale.totalAmount) }
+        : null,
+      purchase: p.purchase
+        ? { ...p.purchase, totalAmount: Number(p.purchase.totalAmount) }
+        : null,
+    }));
+
+    return {
+      data: transformed,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 }
