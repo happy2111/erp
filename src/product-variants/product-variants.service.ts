@@ -1,4 +1,8 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import { Tenant } from '@prisma/client';
 import { Prisma } from '.prisma/client-tenant';
@@ -18,7 +22,7 @@ export interface CleanProductVariant {
   attributes: CleanAttribute[];
 }
 
-export interface PaginatedProductVariants { // <-- Это ключевой экспорт
+export interface PaginatedProductVariants {
   data: CleanProductVariant[];
   total: number;
   page: number;
@@ -34,18 +38,26 @@ export class ProductVariantsService {
 
     const existing = await client.productVariant.findFirst({
       where: {
-        OR: [{ sku: dto.sku ?? undefined }, { barcode: dto.barcode ?? undefined }],
+        OR: [
+          { sku: dto.sku ?? undefined },
+          { barcode: dto.barcode ?? undefined },
+        ],
       },
     });
 
     if (existing) {
-      throw new ConflictException('Вариант с таким SKU или штрихкодом уже существует');
+      throw new ConflictException(
+        'Вариант с таким SKU или штрихкодом уже существует',
+      );
     }
 
     return client.productVariant.create({ data: dto });
   }
 
-  async findAll(tenant: Tenant, filter: ProductVariantFilterDto): Promise<PaginatedProductVariants> {
+  async findAll(
+    tenant: Tenant,
+    filter: ProductVariantFilterDto,
+  ): Promise<PaginatedProductVariants> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const { search, page = 1, limit = 10 } = filter;
 
@@ -93,25 +105,28 @@ export class ProductVariantsService {
 
     // --- 2. Трансформация данных (Маппинг) ---
 
-    const transformedData: CleanProductVariant[] = rawVariants.map(variant => {
-      // 2.1. Создаем "плоский" массив атрибутов
-      const attributes: CleanAttribute[] = variant.product_variant_attribute.map(pva => ({
-        key: pva.value.attribute.key,
-        name: pva.value.attribute.name,
-        value: pva.value.value,
-      }));
+    const transformedData: CleanProductVariant[] = rawVariants.map(
+      (variant) => {
+        // 2.1. Создаем "плоский" массив атрибутов
+        const attributes: CleanAttribute[] =
+          variant.product_variant_attribute.map((pva) => ({
+            key: pva.value.attribute.key,
+            name: pva.value.attribute.name,
+            value: pva.value.value,
+          }));
 
-      // 2.2. Удаляем сложный и ненужный массив Prisma
-      // Создаем новый объект, исключая 'product_variant_attribute'
-      // Используем деструктуризацию для исключения поля
-      const { product_variant_attribute, ...restOfVariant } = variant;
+        // 2.2. Удаляем сложный и ненужный массив Prisma
+        // Создаем новый объект, исключая 'product_variant_attribute'
+        // Используем деструктуризацию для исключения поля
+        const { product_variant_attribute, ...restOfVariant } = variant;
 
-      // 2.3. Возвращаем очищенный объект
-      return {
-        ...restOfVariant,
-        attributes, // Добавляем новый, чистый массив атрибутов
-      } as CleanProductVariant;
-    });
+        // 2.3. Возвращаем очищенный объект
+        return {
+          ...restOfVariant,
+          attributes, // Добавляем новый, чистый массив атрибутов
+        } as CleanProductVariant;
+      },
+    );
 
     // --- 3. Возвращаем финальный ответ ---
 
@@ -119,7 +134,7 @@ export class ProductVariantsService {
       data: transformedData,
       total,
       page,
-      limit
+      limit,
     };
   }
 

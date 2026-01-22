@@ -100,7 +100,10 @@ export class ProductsController {
     example: { id: 'uuid-prod', name: 'Updated Product' },
   })
   @ApiResponse({ status: 404, description: 'Товар не найден' })
-  @ApiResponse({ status: 409, description: 'Товар с таким кодом уже существует' })
+  @ApiResponse({
+    status: 409,
+    description: 'Товар с таким кодом уже существует',
+  })
   update(
     @CurrentTenant() tenant: Tenant,
     @Param('id') id: string,
@@ -116,7 +119,10 @@ export class ProductsController {
   @ApiParam({ name: 'id', description: 'ID товара' })
   @ApiResponse({ status: 200, description: 'Товар успешно удалён' })
   @ApiResponse({ status: 404, description: 'Товар не найден' })
-  @ApiResponse({ status: 400, description: 'Невозможно удалить товар (есть связи)' })
+  @ApiResponse({
+    status: 400,
+    description: 'Невозможно удалить товар (есть связи)',
+  })
   remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
     return this.productsService.remove(tenant, id);
   }

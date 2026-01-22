@@ -51,14 +51,14 @@ export class ProductImagesService {
     const image = await client.productImage.create({
       data: {
         productId,
-        url,
+        key,
         isPrimary,
       },
     });
 
     return {
       imageId: image.id,
-      uploadUrl: url, // фронтенд использует этот URL для PUT запроса
+      uploadUrl: url,
       key,
     };
   }
@@ -74,9 +74,30 @@ export class ProductImagesService {
     });
     if (!image) throw new NotFoundException('Изображение не найдено');
 
-    await this.s3Service.deleteByUrl(image.url);
+    // Удаляем из S3
+    await this.s3Service.deleteByKey(image.key); // можно deleteByUrl тоже
 
-    return client.productImage.delete({ where: { id: imageId } });
+    // Удаляем запись из БД
+    const deletedImage = await client.productImage.delete({
+      where: { id: imageId },
+    });
+
+    // Если удаляли primary, назначаем новое primary (если есть другие изображения)
+    if (image.isPrimary) {
+      const anotherImage = await client.productImage.findFirst({
+        where: { productId: image.productId },
+        orderBy: { createdAt: 'asc' }, // можно выбрать по-другому
+      });
+
+      if (anotherImage) {
+        await client.productImage.update({
+          where: { id: anotherImage.id },
+          data: { isPrimary: true },
+        });
+      }
+    }
+
+    return deletedImage;
   }
 
   /**
@@ -85,9 +106,24 @@ export class ProductImagesService {
   async listProductImages(tenant: Tenant, productId: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    return client.productImage.findMany({
+    const images = await client.productImage.findMany({
       where: { productId },
       orderBy: { isPrimary: 'desc' },
+      select: {
+        id: true,
+        key: true,
+        isPrimary: true,
+      },
     });
+
+    return Promise.all(
+      images.map(async (img) => {
+        const downloadUrl = await this.s3Service.getDownloadUrl(img.key, 3600); // 1 час
+        return {
+          ...img,
+          url: downloadUrl,
+        };
+      }),
+    );
   }
 }

@@ -3,17 +3,17 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
-import {TransformInterceptor} from "./interceptors/response.interceptor";
-import {AllExceptionsFilter} from "./common/filters/http-exception.filter";
-import {DocumentBuilder, SwaggerModule} from "@nestjs/swagger";
+import { TransformInterceptor } from './interceptors/response.interceptor';
+import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
-import {PrismaExceptionFilter} from "./common/filters/prisma-exception.filter";
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.enableCors({
-    origin: ['http://localhost:3000'],
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -27,14 +27,13 @@ async function bootstrap() {
     }),
   );
 
-
   app.useStaticAssets(join(process.cwd(), 'docs'), {
     prefix: '/schema/doc',
   });
 
-  app.useGlobalInterceptors(new TransformInterceptor())
+  app.useGlobalInterceptors(new TransformInterceptor());
 
-  app.useGlobalFilters(new AllExceptionsFilter())
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   app.useGlobalFilters(new PrismaExceptionFilter());
 

@@ -276,7 +276,7 @@ model ProductImage {
   productId        String? @map("product_id")
   productVariantId String? @map("product_variant_id")
 
-  url       String /* URL изображения (S3, CDN, локально) */
+  key       String /* Ключ изображения (S3, CDN, локально) */
   alt       String? /* alt-текст */
   isPrimary Boolean @default(false) /* главное изображение */
   sortOrder Int     @default(0) /* порядок отображения */

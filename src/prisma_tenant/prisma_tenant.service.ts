@@ -19,12 +19,11 @@ export class PrismaTenantService {
       return cached;
     }
 
-    // Создаем новый клиент
     const url = `postgresql://${tenant.dbUser}:${tenant.dbPassword}@${tenant.dbHost}:${tenant.dbPort}/${tenant.dbName}?schema=public`;
 
     const client = new TenantPrismaClient({
       datasources: {
-        db: { url }
+        db: { url },
       }
     });
 
@@ -39,7 +38,7 @@ export class PrismaTenantService {
    */
   async getTenantClientById(tenantId: string): Promise<TenantPrismaClient> {
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId }
+      where: { id: tenantId },
     });
 
     if (!tenant) {
@@ -72,6 +71,6 @@ export class PrismaTenantService {
       await client.$disconnect();
     }
     this.tenantClients.clear();
-  }
+  };
 
 }

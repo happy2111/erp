@@ -19,6 +19,7 @@ export interface UploadFileParams {
 export class S3Service {
   private readonly s3: S3Client;
   private readonly bucket: string;
+  public readonly publicUrl: string;
 
   constructor(
     @Inject(s3Config.KEY)
@@ -35,6 +36,7 @@ export class S3Service {
     });
 
     this.bucket = this.config.bucket;
+    this.publicUrl = `${this.config.endpoint}/${this.bucket}`;
   }
 
   /**
