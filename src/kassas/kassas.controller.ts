@@ -105,7 +105,8 @@ export class KassasController {
   @Get(':id/history')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
   @ApiOperation({
-    summary: 'Получить историю операций по кассе (платежи, переводы)',
+    summary:
+      'Получить полную историю операций по кассе (платежи + переводы между кассами)',
   })
   @ApiParam({ name: 'id', description: 'ID кассы' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
@@ -114,14 +115,10 @@ export class KassasController {
     name: 'type',
     required: false,
     enum: ['INCOME', 'EXPENSE', 'TRANSFER'],
+    description: 'Фильтр по типу операции',
   })
   @ApiQuery({ name: 'fromDate', required: false, example: '2025-01-01' })
   @ApiQuery({ name: 'toDate', required: false, example: '2025-12-31' })
-  @ApiResponse({
-    status: 200,
-    description: 'История операций по кассе',
-  })
-  @ApiResponse({ status: 404, description: 'Касса не найдена' })
   getHistory(
     @CurrentTenant() tenant: Tenant,
     @Param('id') id: string,

@@ -34,7 +34,7 @@
 ## Финансы и кассы
 
 - [x] KassasModule (кассы организации)
-- [x] KassaTransfersModule (переводы между кассами)
+- [ ] KassaTransfersModule (переводы между кассами)
 
 ## Клиенты и контрагенты
 
