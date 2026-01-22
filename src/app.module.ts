@@ -34,6 +34,7 @@ import { SalesModule } from './sales/sales.module';
 import { StocksModule } from './stocks/stocks.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { InstallmentsModule } from './installments/installments.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { PurchasesModule } from './purchases/purchases.module';
     StocksModule,
     PaymentsModule,
     PurchasesModule,
+    InstallmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

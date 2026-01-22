@@ -744,6 +744,7 @@ model Installment {
   monthlyPayment Decimal           @default(0) @map("monthly_payment") /* Расчетный ежемесячный платеж, пример: 125.00 */
   dueDate        DateTime          @map("due_date") /* Крайний срок погашения рассрочки, пример: "2025-12-31T23:59:59Z" */
   status         InstallmentStatus @default(PENDING) /* Статус рассрочки: PENDING, PAID, OVERDUE */
+  notes          String? /* Дополнительные комментарии или условия по рассрочке */
 
   createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
