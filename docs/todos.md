@@ -44,8 +44,8 @@
 
 - [x] SalesModule + SaleItems (продажи + позиции)
 - [x] PaymentsModule (платежи — приход/расход/перевод)
-- [ ] PurchasesModule + PurchaseItems (закупки + позиции)
-- [ ] InstallmentsModule + InstallmentPayments (рассрочки)
+- [x] PurchasesModule + PurchaseItems (закупки + позиции)
+- [x] InstallmentsModule + InstallmentPayments (рассрочки)
 
 ## История и аудит
 
