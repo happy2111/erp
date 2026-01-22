@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import { Tenant } from '@prisma/client';
-import { Prisma, SaleStatus } from '.prisma/client-tenant';
+import { PaymentType, Prisma, SaleStatus } from '.prisma/client-tenant';
 import { KassasService } from '../kassas/kassas.service';
 // TODO импортировать, если нужны фильтры по продажам
 import { StocksService } from '../stocks/stocks.service';
@@ -273,6 +273,18 @@ export class SalesService {
           item.quantity,
         );
       }
+
+      await tx.payment.create({
+        data: {
+          organizationId: tenant.id,
+          kassaId,
+          amount: sale.totalAmount,
+          currencyId: sale.currencyId,
+          type: PaymentType.INCOME,
+          saleId: sale.id,
+          description: `Оплата продажи ${sale.invoiceNumber}`,
+        },
+      });
 
       // Зачисляем в кассу (если указана)
       if (kassaId) {

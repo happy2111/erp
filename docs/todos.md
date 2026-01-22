@@ -43,7 +43,7 @@
 ## Основные бизнес-процессы
 
 - [x] SalesModule + SaleItems (продажи + позиции)
-- [ ] PaymentsModule (платежи — приход/расход/перевод)
+- [x] PaymentsModule (платежи — приход/расход/перевод)
 - [ ] PurchasesModule + PurchaseItems (закупки + позиции)
 - [ ] InstallmentsModule + InstallmentPayments (рассрочки)
 
