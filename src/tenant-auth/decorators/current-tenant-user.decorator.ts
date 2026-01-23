@@ -1,11 +1,19 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { JwtUser } from '../interfaces/jwt.interface';
 
-export const CurrentUser = createParamDecorator(
-  (data: string | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest();
-    if (data) {
-      return request.user?.[data];
+export const CurrentTenantUser = createParamDecorator(
+  (
+    data: keyof JwtUser | undefined,
+    ctx: ExecutionContext,
+  ): JwtUser | JwtUser[keyof JwtUser] | undefined => {
+    const request: { user: JwtUser } = ctx.switchToHttp().getRequest();
+
+    const user = request.user as JwtUser | undefined;
+
+    if (!user) {
+      return undefined;
     }
-    return request.user;
+
+    return data ? user[data] : user;
   },
 );

@@ -1,26 +1,45 @@
 import {
+  ConflictException,
   Injectable,
-  NotFoundException
+  NotFoundException,
 } from '@nestjs/common';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
-import { Tenant } from "@prisma/client";
-import {GetOrganizationsQueryDto} from "./dto/get-organizations-query.dto";
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import { Tenant } from '@prisma/client';
+import { GetOrganizationsQueryDto } from './dto/get-organizations-query.dto';
 
 @Injectable()
 export class OrganizationService {
-  constructor(
-    private readonly prismaTenant: PrismaTenantService,
-    ) {
-  }
+  constructor(private readonly prismaTenant: PrismaTenantService) {}
 
   async create(tenant: Tenant, createOrganizationDto: CreateOrganizationDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
+    // 1. Проверяем существование по любому из уникальных полей
+    const existingOrg = await client.organization.findFirst({
+      where: {
+        OR: [
+          { email: createOrganizationDto.email },
+          { phone: createOrganizationDto.phone },
+        ],
+      },
+    });
+
+    if (existingOrg) {
+      // Уточняем, что именно занято, для более информативного ответа
+      const isEmailTaken = existingOrg.email === createOrganizationDto.email;
+      const field = isEmailTaken ? 'email' : 'phone';
+
+      throw new ConflictException(
+        `Organization with this ${field} already exists`,
+      );
+    }
+
+    // 2. Если всё чисто — создаем
     return client.organization.create({
       data: createOrganizationDto,
-    })
+    });
   }
 
   async findAllForUser(tenant: Tenant, userId: string) {
@@ -75,21 +94,20 @@ export class OrganizationService {
     return org;
   }
 
-
   async findAll(tenant: Tenant, query: GetOrganizationsQueryDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const { search, order = "desc", sortField = "createdAt" } = query;
+    const { search, order = 'desc', sortField = 'createdAt' } = query;
 
     return client.organization.findMany({
       where: search
         ? {
-          OR: [
-            { name: { contains: search, mode: "insensitive" } },
-            { email: { contains: search, mode: "insensitive" } },
-            { phone: { contains: search, mode: "insensitive" } },
-          ],
-        }
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search, mode: 'insensitive' } },
+            ],
+          }
         : undefined,
 
       orderBy: {
@@ -98,17 +116,19 @@ export class OrganizationService {
     });
   }
 
-
-
   findById(tenant: Tenant, id: string) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant)
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const org = client.organization.findUnique({
-      where: {id}
-    })
-    return org
+      where: { id },
+    });
+    return org;
   }
 
-  async update(tenant: Tenant, id: string, updateOrganizationDto: UpdateOrganizationDto) {
+  async update(
+    tenant: Tenant,
+    id: string,
+    updateOrganizationDto: UpdateOrganizationDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     // Проверяем, существует ли организация
@@ -129,13 +149,12 @@ export class OrganizationService {
   async remove(tenant: Tenant, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const exisiting = await client.organization.findUnique({where: {id}})
+    const exisiting = await client.organization.findUnique({ where: { id } });
     if (!exisiting) {
-      throw new Error(`Organization with id ${id} not found`)
+      throw new Error(`Organization with id ${id} not found`);
     }
 
-    await client.organization.delete({where: {id}})
-
+    await client.organization.delete({ where: { id } });
 
     // await client.$transaction([
     //   client.organizationUser.deleteMany({ where: { organizationId: id } }),
@@ -145,6 +164,5 @@ export class OrganizationService {
     //   // ...
     //   client.organization.delete({ where: { id } }),
     // ]);
-
   }
 }
