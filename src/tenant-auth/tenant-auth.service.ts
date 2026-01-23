@@ -1,19 +1,19 @@
 import {
   Injectable,
   NotFoundException,
-  UnauthorizedException
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { SignOptions } from 'jsonwebtoken';
-import {JwtPayload} from "./interfaces/jwt.interface";
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
-import type {Response, Request} from "express";
-import {JwtService} from "@nestjs/jwt";
-import {ConfigService} from "@nestjs/config";
+import { JwtPayload } from './interfaces/jwt.interface';
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import type { Response, Request } from 'express';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { OrgUserRole } from '.prisma/client-tenant';
-import {TenantLoginDto} from "./dto/login.dto";
+import { TenantLoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
-import {JwtTokens} from "./interfaces/jwt-tokens.interface";
-import {Tenant} from "@prisma/client";
+import { JwtTokens } from './interfaces/jwt-tokens.interface';
+import { Tenant } from '@prisma/client';
 
 @Injectable()
 export class TenantAuthService {
@@ -26,13 +26,17 @@ export class TenantAuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
-    this.JWT_ACCESS_TOKEN_TTL = configService.getOrThrow("TENANT_JWT_ACCESS_TOKEN_TTL")
-    this.JWT_REFRESH_TOKEN_TTL = configService.getOrThrow("TENANT_JWT_REFRESH_TOKEN_TTL")
-    this.COOKIE_DOMAIN = configService.getOrThrow("COOKIE_DOMAIN")
+    this.JWT_ACCESS_TOKEN_TTL = configService.getOrThrow(
+      'TENANT_JWT_ACCESS_TOKEN_TTL',
+    );
+    this.JWT_REFRESH_TOKEN_TTL = configService.getOrThrow(
+      'TENANT_JWT_REFRESH_TOKEN_TTL',
+    );
+    this.COOKIE_DOMAIN = configService.getOrThrow('COOKIE_DOMAIN');
   }
 
   async login(res: Response, tenant: Tenant, dto: TenantLoginDto) {
-    const client = await this.prismaTenant.getTenantClientById(tenant.id)
+    const client = await this.prismaTenant.getTenantClientById(tenant.id);
     const loginType = this.determineLoginType(dto.login);
     let user: any;
 
@@ -43,9 +47,9 @@ export class TenantAuthService {
           org_links: true,
           profile: true,
           phone_numbers: true,
-        }
+        },
       });
-    } else if(loginType === 'phone') {
+    } else if (loginType === 'phone') {
       const userPhoneEntry = await client.userPhone.findFirst({
         where: { phone: dto.login },
         include: {
@@ -55,21 +59,21 @@ export class TenantAuthService {
               profile: true,
               phone_numbers: true,
             },
-
-          }
-        }
-      })
+          },
+        },
+      });
       user = userPhoneEntry?.user;
     }
 
-
     if (!user) {
-      throw new NotFoundException('Invalid credentials or user not found in this organization.');
+      throw new NotFoundException(
+        'Invalid credentials or user not found in this organization.',
+      );
     }
 
     const orgUser = await client.organizationUser.findFirst({
-      where: {userId: user.id}
-    })
+      where: { userId: user.id },
+    });
 
     if (!orgUser) {
       throw new NotFoundException('User not found in this organization.');
@@ -81,59 +85,61 @@ export class TenantAuthService {
     }
 
     //TODO почему оно не используется ?
-    const apiKey = tenant.apiKey
-    return this.auth(res, user, tenant, orgUser.role)
+    const apiKey = tenant.apiKey;
+    return this.auth(res, user, tenant, orgUser.role);
   }
 
-  async refresh(res: Response, req : Request, tenant: Tenant) {
+  async refresh(res: Response, req: Request, tenant: Tenant) {
     const token = req.cookies?.refreshToken;
     if (!token) throw new UnauthorizedException('No refresh token provided');
 
     let payload: any;
     try {
-      payload = this.jwtService.verify(token)
-    }catch (e) {
+      payload = this.jwtService.verify(token);
+    } catch (e) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
     const userId = payload.sub;
 
-    const client = await this.prismaTenant.getTenantClientById(tenant.id)
+    const client = await this.prismaTenant.getTenantClientById(tenant.id);
     const orgUser = await client.organizationUser.findFirst({
-      where: {userId},
+      where: { userId },
       include: {
         user: {
           include: {
             profile: true,
             phone_numbers: true,
-          }
+          },
         },
-      }
-    })
-    if (!orgUser) throw new NotFoundException('User not found in this organization.');
+      },
+    });
+    if (!orgUser)
+      throw new NotFoundException('User not found in this organization.');
 
     return this.auth(res, orgUser.user, tenant, orgUser.role);
   }
 
   async validate(payload: JwtPayload) {
-    const client = await this.prismaTenant.getTenantClientById(payload.tenantId)
+    const client = await this.prismaTenant.getTenantClientById(
+      payload.tenantId,
+    );
 
     const orgUser = await client.organizationUser.findFirst({
       where: { userId: payload.sub },
-      include:{
+      include: {
         user: {
-          select: {isActive: true}
-        }
-      }
+          select: { isActive: true },
+        },
+      },
     });
 
-
     if (!orgUser) {
-      throw new NotFoundException("User not found")
+      throw new NotFoundException('User not found');
     }
     if (!orgUser.user.isActive) {
       // Если сам аккаунт пользователя неактивен
-      throw new UnauthorizedException("User account is inactive");
+      throw new UnauthorizedException('User account is inactive');
     }
 
     return {
@@ -144,31 +150,43 @@ export class TenantAuthService {
     };
   }
 
-  private generateToken(sub: string, tenantId: string, role: OrgUserRole): JwtTokens {
-    const payload: JwtPayload = {sub, tenantId, role};
+  private generateToken(
+    sub: string,
+    tenantId: string,
+    role: OrgUserRole,
+  ): JwtTokens {
+    const payload: JwtPayload = { sub, tenantId, role };
 
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: this.JWT_ACCESS_TOKEN_TTL,
-    })
+    });
 
     const refreshToken = this.jwtService.sign(payload, {
       expiresIn: this.JWT_REFRESH_TOKEN_TTL,
-    })
+    });
 
     return {
       accessToken,
       refreshToken,
-    }
+    };
   }
 
   private auth(res: Response, user: any, tenant: Tenant, role: OrgUserRole) {
-    const { accessToken, refreshToken } = this.generateToken(user.id, tenant.id, role);
-    this.setCookie(res, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+    const { accessToken, refreshToken } = this.generateToken(
+      user.id,
+      tenant.id,
+      role,
+    );
+    this.setCookie(
+      res,
+      refreshToken,
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    );
 
     return {
-      accessToken ,
+      accessToken,
       user: this.serializeUser(user, role),
-      apiKey: tenant.apiKey
+      apiKey: tenant.apiKey,
     };
   }
 
@@ -205,7 +223,7 @@ export class TenantAuthService {
       firstName: user.profile?.firstName ?? null,
       lastName: user.profile?.lastName ?? null,
       role,
-      phoneNumbers: user.phone_numbers.map(p => ({
+      phoneNumbers: user.phone_numbers.map((p) => ({
         id: p.id,
         phone: p.phone,
         isPrimary: p.isPrimary,

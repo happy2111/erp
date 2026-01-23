@@ -16,6 +16,7 @@ import { KassasService } from '../kassas/kassas.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { CreateInstallmentPaymentDto } from './dto/create-installment-payment.dto';
 import { InstallmentFilterDto } from './dto/installment-filter.dto';
+import { CancelInstallmentDto } from './dto/cancel-installment.dto';
 
 @Injectable()
 export class InstallmentsService {
@@ -248,5 +249,99 @@ export class InstallmentsService {
       remaining: Number(installment.remaining),
       monthlyPayment: Number(installment.monthlyPayment),
     };
+  }
+
+  async cancel(
+    tenant: Tenant,
+    installmentId: string,
+    dto: CancelInstallmentDto = {},
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    return client.$transaction(async (tx) => {
+      // 1. Находим рассрочку
+      const installment = await tx.installment.findFirst({
+        where: {
+          id: installmentId,
+          // TODO тут нельзя быть tennat.id нужно orgId
+          sale: { organizationId: tenant.id },
+        },
+        include: {
+          sale: { select: { id: true, invoiceNumber: true } },
+          customer: { select: { id: true, firstName: true, lastName: true } },
+          payments: true,
+        },
+      });
+
+      if (!installment) {
+        throw new NotFoundException('Рассрочка не найдена');
+      }
+
+      // 2. Проверяем, можно ли отменить
+      if (installment.status === InstallmentStatus.COMPLETED) {
+        throw new BadRequestException(
+          'Нельзя отменить полностью выплаченную рассрочку',
+        );
+      }
+
+      if (installment.status === InstallmentStatus.CANCELLED) {
+        throw new BadRequestException('Рассрочка уже отменена');
+      }
+
+      // 3. Меняем статус на CANCELLED
+      const updatedInstallment = await tx.installment.update({
+        where: { id: installmentId },
+        data: {
+          status: InstallmentStatus.CANCELLED,
+          notes: dto.reason
+            ? `${installment.notes ? installment.notes + '\n' : ''}Отменена: ${dto.reason}`
+            : installment.notes,
+        },
+      });
+
+      // 4. (Опционально) Корректируем баланс клиента в Transaction
+      // Если клиент уже вносил платежи — создаём обратную запись (debit уменьшается)
+      if (installment.paidAmount.greaterThan(0)) {
+        const lastTransaction = await tx.transaction.findFirst({
+          where: {
+            customerId: installment.customerId,
+            currencyId: installment.sale.currencyId,
+          },
+          orderBy: { date: 'desc' },
+        });
+
+        const previousBalance = lastTransaction
+          ? lastTransaction.balanceAfter
+          : new Prisma.Decimal(0);
+
+        // Обратная запись: уменьшаем долг клиента на сумму уже оплаченного
+        await tx.transaction.create({
+          data: {
+            organizationId: tenant.id,
+            customerId: installment.customerId,
+            relatedType: RelatedType.ADJUSTMENT,
+            relatedId: installmentId,
+            date: new Date(),
+            debit: new Prisma.Decimal(0),
+            credit: installment.paidAmount, // уменьшаем дебет (долг)
+            balanceAfter: previousBalance.sub(installment.paidAmount),
+            currencyId: installment.sale.currencyId,
+            description: `Отмена рассрочки #${installmentId} (${dto.reason || 'без причины'})`,
+          },
+        });
+      }
+
+      // 5. (Опционально) Можно вернуть деньги клиенту через возвратный платёж
+      // Но это зависит от бизнес-логики — если товар возвращён, можно создать REFUND
+
+      return {
+        ...updatedInstallment,
+        totalAmount: Number(updatedInstallment.totalAmount),
+        initialPayment: Number(updatedInstallment.initialPayment),
+        paidAmount: Number(updatedInstallment.paidAmount),
+        remaining: Number(updatedInstallment.remaining),
+        monthlyPayment: Number(updatedInstallment.monthlyPayment),
+      };
+    });
   }
 }

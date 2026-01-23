@@ -1,18 +1,19 @@
 import {
-  IsArray, IsBoolean, IsEmail,
+  IsArray,
+  IsBoolean,
+  IsEmail,
   IsEnum,
   IsOptional,
-  IsString, IsUUID, Length, Matches,
-  ValidateNested
-} from "class-validator";
-import {
-  GenderDtoEnum
-} from "../../tenant-user/dto/create-tenant-user-profile.dto";
-import {Type} from "class-transformer";
-import {ApiProperty} from "@nestjs/swagger";
-import {
-  CreateTenantUserPhoneItemDto
-} from "../../tenant-user/dto/update-tenant-user-phone.dto";
+  IsString,
+  IsUUID,
+  Length,
+  Matches,
+  ValidateNested,
+} from 'class-validator';
+import { GenderDtoEnum } from '../../tenant-user/dto/create-tenant-user-profile.dto';
+import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
+import { CreateTenantUserPhoneItemDto } from '../../tenant-user/dto/update-tenant-user-phone.dto';
 
 export class CustomerToUserProfileDto {
   @ApiProperty({ example: '2003-05-14T00:00:00Z', required: false })
@@ -62,18 +63,18 @@ export class CustomerToUserProfileDto {
   address?: string;
 
   @ApiProperty({
-    description: "Propiska addressi",
-    example: "123 Main St, Anytown, Uzbekistan",
-    required: false
+    description: 'Propiska addressi',
+    example: '123 Main St, Anytown, Uzbekistan',
+    required: false,
   })
   @IsString()
   @IsOptional()
   registration?: string;
 
   @ApiProperty({
-    description: "Hudud, Rayon",
-    example: "Мирзо-Улугбекский район",
-    required: false
+    description: 'Hudud, Rayon',
+    example: 'Мирзо-Улугбекский район',
+    required: false,
   })
   @IsString()
   @IsOptional()
@@ -81,7 +82,7 @@ export class CustomerToUserProfileDto {
 }
 
 export class CustomerToUserDto {
-  @ApiProperty({example: "example@gmail.com", required: false})
+  @ApiProperty({ example: 'example@gmail.com', required: false })
   @IsString()
   @IsOptional()
   @IsEmail()
@@ -91,11 +92,12 @@ export class CustomerToUserDto {
   @IsString()
   @Length(8, 255, { message: 'Пароль должен быть длиной от 8 до 255 символов' })
   @Matches(/^(?=.*[A-Z])(?=.*\d).{8,255}$/, {
-    message: 'Пароль должен содержать минимум одну заглавную букву (A-Z) и минимум одну цифру (0-9).',
+    message:
+      'Пароль должен содержать минимум одну заглавную букву (A-Z) и минимум одну цифру (0-9).',
   })
   password: string;
 
-  @ApiProperty({required: false})
+  @ApiProperty({ required: false })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
@@ -113,7 +115,7 @@ export class ConvertCustomerToUserDto {
   @IsUUID()
   customerId: string;
 
-  @ApiProperty({type: () => CustomerToUserDto})
+  @ApiProperty({ type: () => CustomerToUserDto })
   @ValidateNested()
   @Type(() => CustomerToUserDto)
   user: CustomerToUserDto;
@@ -125,6 +127,3 @@ export class ConvertCustomerToUserDto {
   @IsOptional()
   phonesToAdd?: CreateTenantUserPhoneItemDto[];
 }
-
-
-

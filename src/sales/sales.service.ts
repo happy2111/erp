@@ -7,7 +7,12 @@ import {
 } from '@nestjs/common';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import { Tenant } from '@prisma/client';
-import { PaymentType, Prisma, SaleStatus } from '.prisma/client-tenant';
+import {
+  InstallmentStatus,
+  PaymentType,
+  Prisma,
+  SaleStatus,
+} from '.prisma/client-tenant';
 import { KassasService } from '../kassas/kassas.service';
 // TODO импортировать, если нужны фильтры по продажам
 import { StocksService } from '../stocks/stocks.service';
@@ -15,6 +20,8 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { CodeGeneratorService } from '../code-generater/code-generater.service';
 import { SaleFilterDto } from '../product-transaction/dto/sale-filter.dto';
 import { UpdateSaleDto } from '../product-transaction/dto/update-sale.dto';
+import { InstallmentsService } from '../installments/installments.service';
+import { InstallmentWithCustomer } from '../installments/types/installment';
 
 @Injectable()
 export class SalesService {
@@ -23,25 +30,23 @@ export class SalesService {
     private readonly codeGenerator: CodeGeneratorService,
     private readonly kassasService: KassasService,
     private readonly stocksService: StocksService,
+    private readonly installmentsService: InstallmentsService,
   ) {}
 
   async create(tenant: Tenant, dto: CreateSaleDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // 1. Проверяем валюту
     const currency = await client.currency.findUnique({
       where: { id: dto.currencyId },
     });
     if (!currency) throw new BadRequestException('Валюта не найдена');
 
-    // 2. Генерируем номер накладной
     const invoiceNumber = await this.codeGenerator.generateNextCode(tenant, {
       prefix: 'INV',
       modelName: 'sale',
       sequenceLength: 6,
     });
 
-    // 3. Проверяем и собираем данные по позициям
     const saleItemsData = await Promise.all(
       dto.items.map(async (item) => {
         const variant = await client.productVariant.findUnique({
@@ -49,22 +54,21 @@ export class SalesService {
           include: { currency: true },
         });
 
-        if (!variant)
+        if (!variant) {
           throw new NotFoundException(
             `Вариант товара ${item.productVariantId} не найден`,
           );
+        }
 
-        // Проверяем, что валюта позиции совпадает с валютой продажи
         if (variant.currencyId && variant.currencyId !== dto.currencyId) {
           throw new BadRequestException(
-            `Валюта варианта товара (${variant.currency?.code}) не совпадает с валютой продажи (${currency.code})`,
+            `Валюта варианта (${variant.currency?.code}) не совпадает с валютой продажи (${currency.code})`,
           );
         }
 
         const total = new Prisma.Decimal(item.quantity).mul(item.price);
 
-        // TODO
-        // Опционально: проверка остатка на складе
+        // TODO: можно включить проверку остатка на складе
         // const stock = await client.stock.findFirst({
         //   where: { organizationId: tenant.id, productVariantId: item.productVariantId },
         // });
@@ -82,14 +86,15 @@ export class SalesService {
       }),
     );
 
-    // 4. Считаем общую сумму
+    // 4. Считаем общую сумму продажи
     const totalAmount = saleItemsData.reduce(
       (sum, item) => sum.add(item.total),
       new Prisma.Decimal(0),
     );
 
-    // 5. Создаём продажу и позиции в транзакции
+    // 5. Всё создаём в одной транзакции
     return client.$transaction(async (tx) => {
+      // Создаём продажу
       const sale = await tx.sale.create({
         data: {
           organizationId: tenant.id,
@@ -110,9 +115,7 @@ export class SalesService {
         include: {
           items: {
             include: {
-              product_variant: {
-                select: { title: true, sku: true },
-              },
+              product_variant: { select: { title: true, sku: true } },
             },
           },
           currency: { select: { code: true, symbol: true } },
@@ -123,13 +126,121 @@ export class SalesService {
         },
       });
 
-      // Если статус сразу PAID и указана касса — можно сразу зачислить оплату
-      // Но лучше это делать отдельно через PaymentsModule
+      for (const item of saleItemsData) {
+        await this.stocksService.decrementStock(
+          tx,
+          tenant.id,
+          item.productVariantId,
+          item.quantity,
+        );
+      }
 
+      // === НОВАЯ ЛОГИКА: создание рассрочки, если передан объект installment ===
+      let installment: null | InstallmentWithCustomer = null;
+
+      if (dto.installment) {
+        // Проверяем обязательные поля для рассрочки
+        if (!dto.customerId) {
+          throw new BadRequestException(
+            'Для создания рассрочки необходимо указать клиента (customerId)',
+          );
+        }
+
+        const installmentTotal = new Prisma.Decimal(
+          dto.installment.totalAmount,
+        );
+        const initialPayment = new Prisma.Decimal(
+          dto.installment.initialPayment,
+        );
+
+        // Проверяем: сумма рассрочки + взнос = totalAmount продажи
+        if (!installmentTotal.add(initialPayment).equals(totalAmount)) {
+          throw new BadRequestException(
+            'Сумма рассрочки + первоначальный взнос не равны общей сумме продажи',
+          );
+        }
+
+        // Рассчитываем ежемесячный платёж
+        const monthlyPayment = installmentTotal.div(
+          dto.installment.totalMonths,
+        );
+
+        // Определяем крайний срок погашения
+        const dueDate = dto.installment.dueDate
+          ? new Date(dto.installment.dueDate)
+          : (() => {
+              const date = new Date();
+              date.setMonth(date.getMonth() + dto.installment.totalMonths);
+              return date;
+            })();
+
+        // Создаём рассрочку
+        installment = await tx.installment.create({
+          data: {
+            saleId: sale.id,
+            customerId: dto.customerId,
+            totalAmount: installmentTotal,
+            initialPayment,
+            paidAmount: initialPayment,
+            remaining: installmentTotal,
+            totalMonths: dto.installment.totalMonths,
+            monthsLeft: dto.installment.totalMonths,
+            monthlyPayment,
+            dueDate,
+            status: InstallmentStatus.PENDING,
+            notes: dto.installment.notes,
+          },
+          include: {
+            customer: {
+              select: { firstName: true, lastName: true, phone: true },
+            },
+          },
+        });
+
+        // Если продажа сразу PAID и есть kassaId + initialPayment > 0 → создаём платёж на взнос
+        if (
+          dto.kassaId &&
+          sale.status === SaleStatus.PAID &&
+          initialPayment.greaterThan(0)
+        ) {
+          await tx.payment.create({
+            data: {
+              organizationId: tenant.id,
+              userId: null, // TODO можно добавить @CurrentUser()
+              customerId: dto.customerId,
+              kassaId: dto.kassaId,
+              amount: initialPayment,
+              currencyId: dto.currencyId,
+              type: PaymentType.INCOME,
+              description: `Первоначальный взнос по рассрочке для продажи ${invoiceNumber}`,
+              saleId: sale.id,
+            },
+          });
+
+          // Зачисляем взнос в кассу
+          await this.kassasService.updateBalance(
+            tx,
+            dto.kassaId,
+            Number(initialPayment),
+          );
+        }
+      }
+
+      // Возвращаем продажу + созданную рассрочку (если была)
       return {
         ...sale,
         totalAmount: Number(sale.totalAmount),
         paidAmount: Number(sale.paidAmount),
+        installment: installment
+          ? {
+              ...installment,
+              totalAmount: Number(installment.totalAmount),
+              initialPayment: Number(installment.initialPayment),
+              paidAmount: Number(installment.paidAmount),
+              remaining: Number(installment.remaining),
+              monthlyPayment: Number(installment.monthlyPayment),
+            }
+          : null,
       };
     });
   }

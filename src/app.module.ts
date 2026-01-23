@@ -35,9 +35,12 @@ import { StocksModule } from './stocks/stocks.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { InstallmentsModule } from './installments/installments.module';
+import { TasksModule } from './tasks/tasks.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -73,6 +76,7 @@ import { InstallmentsModule } from './installments/installments.module';
     PaymentsModule,
     PurchasesModule,
     InstallmentsModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

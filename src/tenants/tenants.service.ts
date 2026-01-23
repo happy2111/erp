@@ -2,23 +2,21 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
-  NotFoundException
+  NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Client } from 'pg';
 import { ConfigService } from '@nestjs/config';
-import { execa } from "execa";
-import {
-  OrganizationUserService
-} from "../organization-user/organization-user.service";
-import {OrganizationService} from "../organization/organization.service";
-import {CreateTenantUserDto} from "../tenant-user/dto/create-tenant-user.dto";
+import { execa } from 'execa';
+import { OrganizationUserService } from '../organization-user/organization-user.service';
+import { OrganizationService } from '../organization/organization.service';
+import { CreateTenantUserDto } from '../tenant-user/dto/create-tenant-user.dto';
 import * as bcrypt from 'bcrypt';
-import {OrgUserRole} from ".prisma/client-tenant";
-import { TenantFilterDto } from "./dto/filter-tenant.dto";
-import {Prisma, Tenant} from '@prisma/client'
-import {UpdateTenantDto} from "./dto/update-tenant.dto";
+import { OrgUserRole } from '.prisma/client-tenant';
+import { TenantFilterDto } from './dto/filter-tenant.dto';
+import { Prisma, Tenant } from '@prisma/client';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
 export class TenantsService {
@@ -32,7 +30,7 @@ export class TenantsService {
   async createTenant(
     name: string,
     ownerId: string | undefined,
-    hostname: string | undefined
+    hostname: string | undefined,
   ) {
     const exists = await this.prisma.tenant.findFirst({
       where: { OR: [{ name }, { hostname }] },
@@ -45,9 +43,15 @@ export class TenantsService {
     const apiKey = randomBytes(24).toString('hex');
     const dbName = `tenant_${Date.now()}_${randomBytes(4).toString('hex')}`;
     const dbHost = this.configService.get<string>('POSTGRES_HOST', 'localhost');
-    const dbPort = parseInt(this.configService.get<string>('POSTGRES_PORT', '5432'), 10);
+    const dbPort = parseInt(
+      this.configService.get<string>('POSTGRES_PORT', '5432'),
+      10,
+    );
     const dbUser = this.configService.get<string>('POSTGRES_USER', 'user');
-    const dbPassword = this.configService.get<string>('POSTGRES_PASSWORD', '123456');
+    const dbPassword = this.configService.get<string>(
+      'POSTGRES_PASSWORD',
+      '123456',
+    );
 
     const tenantData: any = {
       name,
@@ -83,9 +87,11 @@ export class TenantsService {
       await this.createDatabase(dbName, dbUser, dbPassword, dbHost, dbPort);
       await this.runMigrations(dbName, dbUser, dbPassword, dbHost, dbPort);
 
-      const organization = await this.organization.create(tenant, { name: 'Test' });
+      const organization = await this.organization.create(tenant, {
+        name: 'Test',
+      });
 
-      let tenantUser:CreateTenantUserDto;
+      let tenantUser: CreateTenantUserDto;
       if (owner) {
         tenantUser = {
           ...(owner.email ? { email: owner.email } : {}),
@@ -100,22 +106,22 @@ export class TenantsService {
               isPrimary: true,
             },
           ],
-        }
+        };
       } else {
         tenantUser = {
-          email: "test@erp.uz",
-          password: "12345678",
+          email: 'test@erp.uz',
+          password: '12345678',
           profile: {
-            firstName: "Happy",
-            lastName: "Tester"
+            firstName: 'Happy',
+            lastName: 'Tester',
           },
           phone_numbers: [
             {
-              phone: "+998991231212",
+              phone: '+998991231212',
               isPrimary: true,
-            }
-          ]
-        }
+            },
+          ],
+        };
       }
 
       await this.organizationUserService.createWithTenantUser(
@@ -123,7 +129,7 @@ export class TenantsService {
         organization.id,
         OrgUserRole.OWNER,
         undefined,
-        tenantUser
+        tenantUser,
       );
 
       return tenant;
@@ -138,7 +144,6 @@ export class TenantsService {
       );
     }
   }
-
 
   async findAll() {
     return this.prisma.tenant.findMany();
@@ -189,8 +194,8 @@ export class TenantsService {
         take,
         orderBy: { createdAt: 'desc' },
         include: {
-          owner: true
-        }
+          owner: true,
+        },
       }),
       this.prisma.tenant.count({ where }),
     ]);
@@ -213,9 +218,10 @@ export class TenantsService {
     return tenant;
   }
 
-
   async update(tenantId: string, dto: UpdateTenantDto): Promise<Tenant> {
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
     if (!tenant) {
       throw new NotFoundException(`Tenant not found`);
     }
@@ -244,7 +250,7 @@ export class TenantsService {
    */
   async deleteTenant(tenantId: string, userId: string) {
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId }
+      where: { id: tenantId },
     });
 
     if (!tenant) {
@@ -264,8 +270,8 @@ export class TenantsService {
               deletedAt: new Date().toISOString(),
               dbName: tenant.dbName,
             },
-          }
-        }
+          },
+        },
       },
     });
 
@@ -277,7 +283,7 @@ export class TenantsService {
    */
   async hardDeleteTenant(tenantId: string, userId: string) {
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId }
+      where: { id: tenantId },
     });
 
     if (!tenant) {
@@ -291,7 +297,7 @@ export class TenantsService {
         tenant.dbUser,
         tenant.dbPassword,
         tenant.dbHost,
-        tenant.dbPort
+        tenant.dbPort,
       );
     } catch (error) {
       console.error(`Failed to drop database ${tenant.dbName}:`, error);
@@ -310,8 +316,8 @@ export class TenantsService {
               deletedAt: new Date().toISOString(),
               dbName: tenant.dbName,
             },
-          }
-        }
+          },
+        },
       },
     });
 
@@ -323,7 +329,7 @@ export class TenantsService {
     user: string,
     password: string,
     host: string,
-    port: number
+    port: number,
   ) {
     const client = new Client({
       user,
@@ -354,7 +360,7 @@ export class TenantsService {
     user: string,
     password: string,
     host: string,
-    port: number
+    port: number,
   ) {
     const client = new Client({
       user,
@@ -391,7 +397,7 @@ export class TenantsService {
     user: string,
     password: string,
     host: string,
-    port: number
+    port: number,
   ) {
     console.log(`🚀 Running migrations for ${dbName}...`);
 
@@ -400,7 +406,7 @@ export class TenantsService {
     try {
       await execa('npm', ['run', 'migrate:tenant:deploy'], {
         env: { ...process.env, TENANT_DATABASE_URL: databaseUrl },
-        stdio: 'inherit'
+        stdio: 'inherit',
       });
       console.log(`✅ Migrations applied for ${dbName}`);
     } catch (err) {
@@ -416,14 +422,14 @@ export class TenantsService {
   async updateAllTenantDatabases() {
     const tenants = await this.prisma.tenant.findMany({
       where: {
-        status: 'ACTIVE'
-      }
+        status: 'ACTIVE',
+      },
     });
-    
+
     console.log(`🔄 Updating ${tenants.length} tenant databases...`);
-    
+
     const results = [];
-    
+
     for (const tenant of tenants) {
       try {
         await this.runMigrations(
@@ -431,7 +437,7 @@ export class TenantsService {
           tenant.dbUser,
           tenant.dbPassword,
           tenant.dbHost,
-          tenant.dbPort
+          tenant.dbPort,
         );
         // @ts-ignore
         results.push({ tenant: tenant.name, status: 'success' });
@@ -439,14 +445,14 @@ export class TenantsService {
       } catch (error) {
         // @ts-ignore
         results.push({
-          tenant: tenant.name, 
-          status: 'failed', 
-          error: error.message 
+          tenant: tenant.name,
+          status: 'failed',
+          error: error.message,
         });
         console.error(`❌ Failed to update ${tenant.dbName}:`, error);
       }
     }
-    
+
     return results;
   }
 }

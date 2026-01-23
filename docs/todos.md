@@ -43,7 +43,6 @@
 ## Основные бизнес-процессы
 
 - [x] SalesModule + SaleItems (продажи + позиции)
-- [x] PaymentsModule (платежи — приход/расход/перевод)
 - [x] PurchasesModule + PurchaseItems (закупки + позиции)
 - [x] InstallmentsModule + InstallmentPayments (рассрочки)
 
@@ -61,3 +60,7 @@
 - [ ] Swagger + API документация
 - [ ] Unit + E2E тесты
 - [ ] Rate limiting, security headers, CORSnk
+- [ ] Автоматическая проверка просрочки Можно добавить cron-задачу (например, через @nestjs/schedule), которая каждый день проверяет dueDate и меняет статус на OVERDUE.
+- [ ] Отмена рассрочки Можно добавить метод cancelInstallment, который вернёт статус CANCELLED и скорректирует баланс клиента.
+- [ ] Добавить модуль возвратов (ReturnsModule)?
+- [ ] Полная проверка правы на контролерах (Roles)
