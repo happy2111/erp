@@ -1,33 +1,33 @@
 import {
-  BadRequestException, ConflictException,
-  Injectable, InternalServerErrorException,
-  NotFoundException
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
-import {Tenant} from "@prisma/client";
-import {OrgUserRole, Prisma} from ".prisma/client-tenant"
-import {CreateOrganizationUserDto} from "./dto/create-org-user.dto";
-import {OrgUserFilterDto} from "./dto/org-user-filter.dto";
-import {TenantUserService} from "../tenant-user/tenant-user.service";
-import {CreateTenantUserDto} from "../tenant-user/dto/create-tenant-user.dto";
-import {UpdateOrganizationUserDto} from "./dto/update-organization-user.dto";
-import {CreateOrgUserWithUserDto} from "./dto/create-org_user-with-user.dto";
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import { Tenant } from '@prisma/client';
+import { OrgUserRole, Prisma } from '.prisma/client-tenant';
+import { CreateOrganizationUserDto } from './dto/create-org-user.dto';
+import { OrgUserFilterDto } from './dto/org-user-filter.dto';
+import { TenantUserService } from '../tenant-user/tenant-user.service';
+import { CreateTenantUserDto } from '../tenant-user/dto/create-tenant-user.dto';
+import { CreateOrgUserWithUserDto } from './dto/create-org_user-with-user.dto';
 
 @Injectable()
 export class OrganizationUserService {
   constructor(
     private readonly prismaTenant: PrismaTenantService,
     private readonly tenantUserService: TenantUserService,
-  ) {
-  }
+  ) {}
 
   async create(tenant: Tenant, dto: CreateOrganizationUserDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     return client.organizationUser.create({
       data: {
-        ...dto
-      }
-    })
+        ...dto,
+      },
+    });
   }
 
   async createWithUser(dto: CreateOrgUserWithUserDto, tenant: Tenant) {
@@ -38,7 +38,7 @@ export class OrganizationUserService {
     });
 
     if (!organization) {
-      throw new NotFoundException("Organization not found");
+      throw new NotFoundException('Organization not found');
     }
 
     if (dto.user.email) {
@@ -47,7 +47,7 @@ export class OrganizationUserService {
       });
 
       if (existingUserEmail) {
-        throw new ConflictException("User with this email already exists");
+        throw new ConflictException('User with this email already exists');
       }
     }
 
@@ -59,7 +59,7 @@ export class OrganizationUserService {
 
         if (existingPhone) {
           throw new ConflictException(
-            `Phone number ${phone.phone} already exists`
+            `Phone number ${phone.phone} already exists`,
           );
         }
       }
@@ -68,7 +68,7 @@ export class OrganizationUserService {
     const createdUser = await this.tenantUserService.create(tenant, dto.user);
 
     if (!createdUser) {
-      throw new InternalServerErrorException("Failed to create user");
+      throw new InternalServerErrorException('Failed to create user');
     }
 
     // const existingOrgUser = await client.organizationUser.findUnique({
@@ -101,11 +101,14 @@ export class OrganizationUserService {
     organizationId: string,
     role: OrgUserRole,
     position: string | undefined,
-    createTenantUserDto: CreateTenantUserDto
+    createTenantUserDto: CreateTenantUserDto,
   ) {
     try {
       // создаём пользователя в tenant DB
-      const user = await this.tenantUserService.create(tenant, createTenantUserDto);
+      const user = await this.tenantUserService.create(
+        tenant,
+        createTenantUserDto,
+      );
       if (!user) {
         throw new Error('User creation failed — no user returned');
       }
@@ -117,7 +120,7 @@ export class OrganizationUserService {
         organizationId,
         userId: user.id,
         role,
-        ...(position ? {position} : {}),
+        ...(position ? { position } : {}),
       };
 
       // создаём запись organizationUser
@@ -129,7 +132,6 @@ export class OrganizationUserService {
       throw new Error('Error creating user with organization relation');
     }
   }
-
 
   async filter(tenant: Tenant, dto: OrgUserFilterDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
@@ -150,8 +152,20 @@ export class OrganizationUserService {
     if (dto.search) {
       // Пример поиска по имени пользователя или позиции
       where.OR = [
-        { user: { profile: { firstName: { contains: dto.search, mode: 'insensitive' } } } },
-        { user: { profile: { lastName: { contains: dto.search, mode: 'insensitive' } } } },
+        {
+          user: {
+            profile: {
+              firstName: { contains: dto.search, mode: 'insensitive' },
+            },
+          },
+        },
+        {
+          user: {
+            profile: {
+              lastName: { contains: dto.search, mode: 'insensitive' },
+            },
+          },
+        },
         { position: { contains: dto.search, mode: 'insensitive' } },
       ];
     }
@@ -177,11 +191,10 @@ export class OrganizationUserService {
                   firstName: true,
                   lastName: true,
                   gender: true,
-
-                }
+                },
               },
-              phone_numbers: true
-            }
+              phone_numbers: true,
+            },
           },
         },
         orderBy: {
@@ -201,7 +214,6 @@ export class OrganizationUserService {
       totalPages: Math.ceil(total / dto.limit),
     };
   }
-
 
   // async update(
   //   tenant: Tenant,
@@ -237,17 +249,16 @@ export class OrganizationUserService {
   async delete(tenant: Tenant, id: string, performedByUserId?: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const existingUser = await client.organizationUser.findUnique({
-      where: {id},
+      where: { id },
     });
 
     if (!existingUser) {
       throw new NotFoundException(`Organization user with ID ${id} not found`);
     }
 
-
     await client.$transaction(async (tx) => {
       await tx.organizationUser.delete({
-        where: {id},
+        where: { id },
       });
 
       await tx.auditLog.create({
@@ -263,6 +274,6 @@ export class OrganizationUserService {
         },
       });
     });
-    return {message: 'Organization user deleted successfully'};
+    return { message: 'Organization user deleted successfully' };
   }
 }

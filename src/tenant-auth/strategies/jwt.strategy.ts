@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { TenantAuthService } from '../tenant-auth.service';
 import { JwtPayload } from '../interfaces/jwt.interface';
+import type { Request } from 'express';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -12,7 +13,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private readonly configService: ConfigService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request): string | null => {
+          return (req?.cookies?.accessToken as string) || null;
+        },
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('TENANT_JWT_SECRET'),
       algorithms: ['HS256'],

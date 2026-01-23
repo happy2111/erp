@@ -4,16 +4,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { SignOptions } from 'jsonwebtoken';
-import { JwtPayload } from './interfaces/jwt.interface';
+import { JwtPayload, JwtUser } from './interfaces/jwt.interface';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import type { Response, Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { OrgUserRole } from '.prisma/client-tenant';
+import { OrgUserRole, Prisma } from '.prisma/client-tenant';
 import { TenantLoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
-import { JwtTokens } from './interfaces/jwt-tokens.interface';
 import { Tenant } from '@prisma/client';
+import {
+  OrganizationUserWithRelations,
+  UserForSerialization,
+  UserWithAuthRelations,
+} from './types/user';
 
 @Injectable()
 export class TenantAuthService {
@@ -38,45 +42,12 @@ export class TenantAuthService {
   async login(res: Response, tenant: Tenant, dto: TenantLoginDto) {
     const client = await this.prismaTenant.getTenantClientById(tenant.id);
     const loginType = this.determineLoginType(dto.login);
-    let user: any;
 
-    if (loginType === 'email') {
-      user = await client.user.findUnique({
-        where: { email: dto.login },
-        include: {
-          org_links: true,
-          profile: true,
-          phone_numbers: true,
-        },
-      });
-    } else if (loginType === 'phone') {
-      const userPhoneEntry = await client.userPhone.findFirst({
-        where: { phone: dto.login },
-        include: {
-          user: {
-            include: {
-              org_links: true,
-              profile: true,
-              phone_numbers: true,
-            },
-          },
-        },
-      });
-      user = userPhoneEntry?.user;
-    }
+    // findUser должен возвращать UserWithAuthRelations | null
+    const user = await this.findUser(client, dto, loginType);
 
     if (!user) {
-      throw new NotFoundException(
-        'Invalid credentials or user not found in this organization.',
-      );
-    }
-
-    const orgUser = await client.organizationUser.findFirst({
-      where: { userId: user.id },
-    });
-
-    if (!orgUser) {
-      throw new NotFoundException('User not found in this organization.');
+      throw new NotFoundException('Invalid credentials');
     }
 
     const passwordValid = await bcrypt.compare(dto.password, user.password);
@@ -84,27 +55,56 @@ export class TenantAuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    //TODO почему оно не используется ?
-    const apiKey = tenant.apiKey;
-    return this.auth(res, user, tenant, orgUser.role);
+    const orgUsers = user.org_links; // TS теперь знает, что это массив OrganizationUser[]
+
+    if (orgUsers.length === 0) {
+      throw new NotFoundException('User has no organizations');
+    }
+
+    if (orgUsers.length > 1) {
+      const tempToken = this.jwtService.sign(
+        {
+          sub: user.id,
+          tenantId: tenant.id,
+          purpose: 'ORG_SELECTION',
+        },
+        { expiresIn: '5m' },
+      );
+      this.setAccessCookie(
+        res,
+        tempToken,
+        new Date(Date.now() + 5 * 60 * 1000),
+      );
+
+      return {
+        requiresOrgSelection: true,
+        organizations: orgUsers.map((ou) => ({
+          orgUserId: ou.id,
+          orgId: ou.organizationId,
+          role: ou.role,
+        })),
+        apiKey: tenant.apiKey,
+      };
+    }
+
+    return this.authWithOrgUser(res, user, tenant, orgUsers[0]);
   }
 
   async refresh(res: Response, req: Request, tenant: Tenant) {
-    const token = req.cookies?.refreshToken;
+    const token = req.cookies?.refreshToken as string | undefined;
     if (!token) throw new UnauthorizedException('No refresh token provided');
 
-    let payload: any;
+    let payload: JwtPayload;
     try {
       payload = this.jwtService.verify(token);
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const userId = payload.sub;
-
     const client = await this.prismaTenant.getTenantClientById(tenant.id);
-    const orgUser = await client.organizationUser.findFirst({
-      where: { userId },
+
+    const orgUser = await client.organizationUser.findUnique({
+      where: { id: payload.orgUserId },
       include: {
         user: {
           include: {
@@ -114,48 +114,65 @@ export class TenantAuthService {
         },
       },
     });
-    if (!orgUser)
-      throw new NotFoundException('User not found in this organization.');
 
-    return this.auth(res, orgUser.user, tenant, orgUser.role);
+    if (!orgUser || !orgUser.user.isActive) {
+      throw new UnauthorizedException();
+    }
+
+    return this.authWithOrgUser(res, orgUser.user, tenant, orgUser);
   }
 
-  async validate(payload: JwtPayload) {
+  async validate(payload: JwtPayload): Promise<JwtUser> {
+    const userBase = {
+      userId: payload.sub,
+      tenantId: payload.tenantId,
+    };
+    if (payload.purpose === 'ORG_SELECTION') {
+      return {
+        ...userBase,
+        purpose: payload.purpose,
+      };
+    }
+
+    if (!payload.orgId)
+      throw new UnauthorizedException('Invalid token payload');
+
     const client = await this.prismaTenant.getTenantClientById(
       payload.tenantId,
     );
 
-    const orgUser = await client.organizationUser.findFirst({
-      where: { userId: payload.sub },
+    const orgUser = await client.organizationUser.findUnique({
+      where: { id: payload.orgUserId },
       include: {
-        user: {
-          select: { isActive: true },
-        },
+        user: true,
       },
     });
 
-    if (!orgUser) {
-      throw new NotFoundException('User not found');
-    }
-    if (!orgUser.user.isActive) {
-      // Если сам аккаунт пользователя неактивен
-      throw new UnauthorizedException('User account is inactive');
+    if (!orgUser || !orgUser.user.isActive) {
+      throw new UnauthorizedException();
     }
 
     return {
-      id: payload.sub,
-      tenantId: payload.tenantId,
-      orgRole: orgUser.role,
-      isActive: orgUser.user.isActive,
+      ...userBase,
+      orgId: payload.orgId,
+      orgUserId: payload.orgUserId,
+      role: payload.role,
     };
   }
 
-  private generateToken(
-    sub: string,
-    tenantId: string,
-    role: OrgUserRole,
-  ): JwtTokens {
-    const payload: JwtPayload = { sub, tenantId, role };
+  private authWithOrgUser(
+    res: Response,
+    user: UserForSerialization,
+    tenant: Tenant,
+    orgUser: OrganizationUserWithRelations,
+  ) {
+    const payload: JwtPayload = {
+      sub: user.id,
+      tenantId: tenant.id,
+      orgId: orgUser.organizationId,
+      orgUserId: orgUser.id,
+      role: orgUser.role,
+    };
 
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: this.JWT_ACCESS_TOKEN_TTL,
@@ -165,38 +182,42 @@ export class TenantAuthService {
       expiresIn: this.JWT_REFRESH_TOKEN_TTL,
     });
 
-    return {
+    this.setAccessCookie(
+      res,
       accessToken,
-      refreshToken,
-    };
-  }
-
-  private auth(res: Response, user: any, tenant: Tenant, role: OrgUserRole) {
-    const { accessToken, refreshToken } = this.generateToken(
-      user.id,
-      tenant.id,
-      role,
+      new Date(Date.now() + 15 * 60 * 1000),
     );
-    this.setCookie(
+    this.setRefreshCookie(
       res,
       refreshToken,
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     );
 
     return {
-      accessToken,
-      user: this.serializeUser(user, role),
+      user: this.serializeUser(user, orgUser.role),
+      organizationId: orgUser.organizationId,
       apiKey: tenant.apiKey,
     };
   }
 
-  private setCookie(res: Response, value: string, expires: Date) {
-    res.cookie('refreshToken', value, {
+  private setAccessCookie(res: Response, value: string, expires: Date) {
+    res.cookie('accessToken', value, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       domain: this.COOKIE_DOMAIN,
       path: '/',
+      expires,
+    });
+  }
+
+  private setRefreshCookie(res: Response, value: string, expires: Date) {
+    res.cookie('refreshToken', value, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      domain: this.COOKIE_DOMAIN,
+      path: '/tenant-auth/refresh', // 🔥 важно
       expires,
     });
   }
@@ -207,8 +228,6 @@ export class TenantAuthService {
       return 'email';
     }
 
-    // Проверка, что строка состоит только из цифр и, возможно, начинается с '+'
-    // Предполагаем, что телефонные номера начинаются с '+' или просто цифры
     const phoneRegex = /^\+?[0-9\s-]+$/;
     if (phoneRegex.test(login)) {
       return 'phone';
@@ -217,7 +236,7 @@ export class TenantAuthService {
     return 'unknown';
   }
 
-  private serializeUser(user: any, role: OrgUserRole) {
+  private serializeUser(user: UserForSerialization, role: OrgUserRole) {
     return {
       id: user.id,
       firstName: user.profile?.firstName ?? null,
@@ -229,5 +248,71 @@ export class TenantAuthService {
         isPrimary: p.isPrimary,
       })),
     };
+  }
+
+  private async findUser(
+    client: Prisma.TransactionClient, // Заменяем any на Prisma.TransactionClient
+    dto: TenantLoginDto,
+    loginType: 'email' | 'phone' | 'unknown',
+  ): Promise<UserWithAuthRelations | null> {
+    // Типизируем include через Prisma.UserInclude
+    const commonInclude: Prisma.UserInclude = {
+      profile: true,
+      phone_numbers: true,
+      org_links: true,
+    };
+
+    if (loginType === 'email') {
+      return (await client.user.findUnique({
+        where: { email: dto.login },
+        include: commonInclude,
+      })) as UserWithAuthRelations | null;
+    }
+
+    if (loginType === 'phone') {
+      const phoneEntry = await client.userPhone.findFirst({
+        where: { phone: dto.login },
+        include: {
+          user: {
+            include: commonInclude,
+          },
+        },
+      });
+
+      return (phoneEntry?.user as UserWithAuthRelations) ?? null;
+    }
+
+    return null;
+  }
+
+  async switchOrganization(
+    res: Response,
+    tenant: Tenant,
+    userId: string,
+    orgUserId: string,
+  ) {
+    const client = await this.prismaTenant.getTenantClientById(tenant.id);
+
+    const orgUser = await client.organizationUser.findUnique({
+      where: { id: orgUserId },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            phone_numbers: true,
+          },
+        },
+      },
+    });
+
+    if (!orgUser || orgUser.userId !== userId) {
+      throw new UnauthorizedException();
+    }
+
+    if (!orgUser || orgUser.userId !== userId) {
+      throw new UnauthorizedException();
+    }
+
+    return this.authWithOrgUser(res, orgUser.user, tenant, orgUser);
   }
 }
