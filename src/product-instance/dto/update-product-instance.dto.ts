@@ -1,24 +1,20 @@
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
-import {ProductStatus} from ".prisma/client-tenant";
-
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { ProductStatus } from '.prisma/client-tenant';
 
 export class UpdateProductInstanceDto {
-  @ApiProperty({ required: false, nullable: true, description: 'New Product Variant ID' })
+  @ApiPropertyOptional({ example: 'uuid-product-variant' })
   @IsOptional()
-  @IsString()
   @IsUUID()
-  @Type(() => String)
-  productVariantId?: string | null;
+  productVariantId?: string;
 
-  @ApiProperty({
-    required: false,
-    enum: ProductStatus,
-    description: 'New status of the product instance'
-  })
+  @ApiPropertyOptional({ enum: ProductStatus })
   @IsOptional()
   @IsEnum(ProductStatus)
   currentStatus?: ProductStatus;
 
+  @ApiPropertyOptional({ example: 'uuid-customer' })
+  @IsOptional()
+  @IsUUID()
+  currentOwnerId?: string;
 }

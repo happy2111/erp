@@ -253,6 +253,9 @@ model OrganizationCustomer {
   installments      Installment[] /* Рассрочки, оформленные клиентом */
   documents         Document[] /* Документы, связанные с клиентом (договоры, акты, счета и т.д.) */
 
+  transactionsFrom ProductTransaction[] @relation("from_customer")
+  transactionsTo   ProductTransaction[] @relation("to_customer")
+
   @@map("organization_customers")
 }
 
@@ -469,6 +472,9 @@ model ProductTransaction {
   date              DateTime        @default(now()) /* Дата и время транзакции, пример: "2025-11-02T12:00:00Z" */
   description       String? /* Дополнительное описание или комментарий к транзакции, пример: "Возврат по гарантии" */
   product_instance  ProductInstance @relation(fields: [productInstanceId], references: [id], onDelete: Cascade) /* Связь с экземпляром товара (ProductInstance) */
+
+  from_customer OrganizationCustomer? @relation("from_customer", fields: [fromCustomerId], references: [id])
+  to_customer   OrganizationCustomer? @relation("to_customer", fields: [toCustomerId], references: [id])
 
   @@map("product_transactions") /* Имя таблицы в базе данных */
 }

@@ -1,198 +1,207 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
-  Param,
-  Patch,
   Post,
+  Patch,
+  Delete,
+  Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
+  ApiQuery,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
 import { ProductInstanceService } from './product-instance.service';
-import { CreateProductInstanceDto } from './dto/create-producti-instance.dto';
-import { UpdateProductInstanceDto } from './dto/update-product-instance.dto';
+import { ApiKeyGuard } from '../guards/api-key.guard';
+import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
+import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
+import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
+import { OrgUserRole, ProductStatus } from '.prisma/client-tenant';
+import { TenantRolesGuard } from '../guards/tenant-roles.guard';
+import { Roles } from '../decorators/tenant-roles.decorator';
+import { CreateProductInstanceDto } from './dto/create-product-instance.dto';
 import { FindAllProductInstanceDto } from './dto/filter-instace.dto';
+import { UpdateProductInstanceDto } from './dto/update-product-instance.dto';
 import { SellInstanceDto } from './dto/sell-instance.dto';
 import { ReturnInstanceDto } from './dto/return-instance.dto';
 import { TransferInstanceDto } from './dto/transfer-instance.dto';
 import { ResellInstanceDto } from './dto/resell-instance.dto';
 import { MarkLostDto } from './dto/mark-lost.dto';
-import { ApiKeyGuard } from '../guards/api-key.guard';
-import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
-import { TenantRolesGuard } from '../guards/tenant-roles.guard';
-import { Roles } from '../decorators/tenant-roles.decorator';
-import { OrgUserRole } from '.prisma/client-tenant';
-import { CurrentTenant } from '../decorators/currectTenant.decorator';
-import type { Tenant } from '@prisma/client';
 
 @ApiTags('Product Instances')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('product-instances')
 export class ProductInstanceController {
   constructor(
     private readonly productInstanceService: ProductInstanceService,
   ) {}
 
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   // CREATE
-  // -------------------------
-  @Post('create')
+  // ─────────────────────────────────────────────────────────────
+  @Post()
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({
-    summary: 'Создать новую экземпляр продукта (серийный номер)',
-  })
-  @ApiResponse({ status: 201, description: 'Экземпляр успешно создан' })
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Создание нового экземпляра товара' })
   create(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Body() dto: CreateProductInstanceDto,
   ) {
-    return this.productInstanceService.create(tenant, dto);
+    return this.productInstanceService.create(tenant, user.orgId, dto);
   }
 
-  // -------------------------
-  // LIST / FILTER
-  // -------------------------
-  @Post('filter')
+  // ─────────────────────────────────────────────────────────────
+  // FIND ALL
+  // ─────────────────────────────────────────────────────────────
+  @Get()
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Фильтрация и пагинация экземпляров продуктов' })
-  @ApiResponse({
-    status: 200,
-    description: 'Список экземпляров успешно получен',
+  @ApiOperation({
+    summary: 'Список экземпляров товара с фильтрацией и пагинацией',
   })
+  @ApiQuery({ name: 'productVariantId', required: false })
+  @ApiQuery({ name: 'serialNumber', required: false })
+  @ApiQuery({ name: 'status', required: false, enum: ProductStatus })
+  @ApiQuery({ name: 'currentOwnerId', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   findAll(
     @CurrentTenant() tenant: Tenant,
-    @Body() filter: FindAllProductInstanceDto,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() filter: FindAllProductInstanceDto,
   ) {
-    return this.productInstanceService.findAll(tenant, filter);
+    return this.productInstanceService.findAll(tenant, user.orgId, filter);
   }
 
-  // -------------------------
-  // GET ONE
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
+  // FIND ONE
+  // ─────────────────────────────────────────────────────────────
   @Get(':id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить экземпляр продукта по ID' })
-  @ApiParam({ name: 'id', description: 'UUID экземпляра продукта' })
-  @ApiResponse({ status: 200, description: 'Экземпляр найден' })
-  @ApiResponse({ status: 404, description: 'Экземпляр не найден' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productInstanceService.findOne(tenant, id);
+  @ApiOperation({ summary: 'Детальная информация по экземпляру товара' })
+  @ApiParam({ name: 'id' })
+  findOne(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.productInstanceService.findOne(tenant, user.orgId, id);
   }
 
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   // UPDATE
-  // -------------------------
-  @Patch('update/:id')
+  // ─────────────────────────────────────────────────────────────
+  @Patch(':id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Обновить экземпляр продукта' })
-  @ApiParam({ name: 'id', description: 'UUID экземпляра продукта' })
-  @ApiResponse({ status: 200, description: 'Экземпляр успешно обновлён' })
-  @ApiResponse({ status: 404, description: 'Экземпляр не найден' })
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Обновление экземпляра товара' })
+  @ApiParam({ name: 'id' })
   update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateProductInstanceDto,
   ) {
-    return this.productInstanceService.update(tenant, id, dto);
+    return this.productInstanceService.update(tenant, user.orgId, id, dto);
   }
 
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   // DELETE
-  // -------------------------
-  @Delete('remove/:id')
+  // ─────────────────────────────────────────────────────────────
+  @Delete(':id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Удалить экземпляр продукта' })
-  @ApiParam({ name: 'id', description: 'UUID экземпляра продукта' })
-  @ApiResponse({ status: 200, description: 'Экземпляр успешно удалён' })
-  @ApiResponse({ status: 404, description: 'Экземпляр не найден' })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productInstanceService.delete(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Удаление экземпляра товара' })
+  @ApiParam({ name: 'id' })
+  remove(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.productInstanceService.remove(tenant, user.orgId, id);
   }
 
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   // SELL
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   @Post('sell')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Продать экземпляр продукта покупателю' })
-  @ApiResponse({ status: 200, description: 'Экземпляр успешно продан' })
-  @ApiResponse({ status: 404, description: 'Экземпляр не найден' })
-  @ApiResponse({ status: 400, description: 'Экземпляр уже продан' })
-  sell(@CurrentTenant() tenant: Tenant, @Body() dto: SellInstanceDto) {
-    return this.productInstanceService.sell(tenant, dto);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Продажа экземпляра товара' })
+  sell(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: SellInstanceDto,
+  ) {
+    return this.productInstanceService.sell(tenant, user.orgId, dto);
   }
 
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   // RETURN
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   @Post('return')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Вернуть экземпляр продукта на склад' })
-  @ApiResponse({ status: 200, description: 'Экземпляр успешно возвращён' })
-  return(@CurrentTenant() tenant: Tenant, @Body() dto: ReturnInstanceDto) {
-    return this.productInstanceService.return(tenant, dto);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Возврат экземпляра товара' })
+  return(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: ReturnInstanceDto,
+  ) {
+    return this.productInstanceService.return(tenant, user.orgId, dto);
   }
 
-  // -------------------------
-  // TRANSFER BETWEEN ORGANIZATIONS
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
+  // TRANSFER
+  // ─────────────────────────────────────────────────────────────
   @Post('transfer')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Переместить экземпляр между организациями' })
-  @ApiResponse({ status: 200, description: 'Экземпляр успешно перемещён' })
-  transfer(@CurrentTenant() tenant: Tenant, @Body() dto: TransferInstanceDto) {
-    return this.productInstanceService.transfer(tenant, dto);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Передача экземпляра между организациями' })
+  transfer(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: TransferInstanceDto,
+  ) {
+    return this.productInstanceService.transfer(tenant, user.orgId, dto);
   }
 
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   // RESELL
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   @Post('resell')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({
-    summary: 'Перепродать возвращённый/отремонтированный экземпляр',
-  })
-  @ApiResponse({ status: 200, description: 'Экземпляр успешно перепродан' })
-  resell(@CurrentTenant() tenant: Tenant, @Body() dto: ResellInstanceDto) {
-    return this.productInstanceService.resell(tenant, dto);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Перепродажа экземпляра товара' })
+  resell(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: ResellInstanceDto,
+  ) {
+    return this.productInstanceService.resell(tenant, user.orgId, dto);
   }
 
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   // MARK LOST
-  // -------------------------
+  // ─────────────────────────────────────────────────────────────
   @Post('mark-lost')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Пометить экземпляр как утерянный/списанный' })
-  @ApiResponse({ status: 200, description: 'Экземпляр помечен как утерянный' })
-  markLost(@CurrentTenant() tenant: Tenant, @Body() dto: MarkLostDto) {
-    return this.productInstanceService.markLost(tenant, dto);
-  }
-
-  // -------------------------
-  // HISTORY
-  // -------------------------
-  @Get('history/:id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить историю транзакций экземпляра' })
-  @ApiParam({ name: 'id', description: 'UUID экземпляра продукта' })
-  @ApiResponse({ status: 200, description: 'История успешно получена' })
-  getHistory(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productInstanceService.getHistory(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Списание / утеря экземпляра товара' })
+  markLost(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: MarkLostDto,
+  ) {
+    return this.productInstanceService.markLost(tenant, user.orgId, dto);
   }
 }

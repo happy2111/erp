@@ -1,31 +1,24 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ProductStatus } from '.prisma/client-tenant';
 
-export class FindAllProductInstanceDto {
+export class CreateProductInstanceDto {
   @ApiPropertyOptional({ example: 'uuid-product-variant' })
   @IsOptional()
   @IsUUID()
   productVariantId?: string;
 
-  @ApiPropertyOptional({ example: 'SN-ABC' })
-  @IsOptional()
+  @ApiProperty({ example: 'SN-ABC-123456' })
   @IsString()
-  serialNumber?: string;
+  serialNumber: string;
 
-  @ApiPropertyOptional({ enum: ProductStatus })
+  @ApiPropertyOptional({ enum: ProductStatus, example: ProductStatus.IN_STOCK })
   @IsOptional()
   @IsEnum(ProductStatus)
-  status?: ProductStatus;
+  currentStatus?: ProductStatus;
 
   @ApiPropertyOptional({ example: 'uuid-customer' })
   @IsOptional()
   @IsUUID()
   currentOwnerId?: string;
-
-  @ApiPropertyOptional({ example: 1 })
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 20 })
-  limit?: number = 20;
 }

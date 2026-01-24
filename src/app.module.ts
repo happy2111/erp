@@ -24,7 +24,6 @@ import { ProductCategoryModule } from './product-category/product-category.modul
 import { ProductPriceModule } from './product-price/product-price.module';
 import { ProductBatchModule } from './product-batch/product-batch.module';
 import { ProductInstanceModule } from './product-instance/product-instance.module';
-import { ProductTransactionModule } from './product-transaction/product-transaction.module';
 import { MainUserRefreshTokenModule } from './main-user-refresh-token/main-user-refresh-token.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { S3Module } from './s3/s3.module';
@@ -38,6 +37,7 @@ import { InstallmentsModule } from './installments/installments.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TransactionsModule } from './transactions/transactions.module';
+import { ProductTransactionsModule } from './product-transactions/product-transactions.module';
 
 @Module({
   imports: [
@@ -67,7 +67,6 @@ import { TransactionsModule } from './transactions/transactions.module';
     ProductPriceModule,
     ProductBatchModule,
     ProductInstanceModule,
-    ProductTransactionModule,
     MainUserRefreshTokenModule,
     S3Module,
     KassasModule,
@@ -79,6 +78,7 @@ import { TransactionsModule } from './transactions/transactions.module';
     InstallmentsModule,
     TasksModule,
     TransactionsModule,
+    ProductTransactionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

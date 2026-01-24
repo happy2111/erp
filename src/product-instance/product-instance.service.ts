@@ -1,102 +1,115 @@
 import {
-  Injectable,
-  NotFoundException,
   BadRequestException,
   ConflictException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
-import type { Tenant } from '@prisma/client';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
-import { ProductTransactionService } from '../product-transaction/product-transaction.service';
-import { ProductAction, ProductStatus } from '.prisma/client-tenant';
-import { UpdateProductInstanceDto } from "./dto/update-product-instance.dto";
-import {SellInstanceDto} from "./dto/sell-instance.dto";
-import {ReturnInstanceDto} from "./dto/return-instance.dto";
-import { TransferInstanceDto} from "./dto/transfer-instance.dto";
-import { ResellInstanceDto }  from './dto/resell-instance.dto';
-import { MarkLostDto } from "./dto/mark-lost.dto";
-import { CreateProductInstanceDto} from "./dto/create-producti-instance.dto";
-import {FindAllProductInstanceDto} from "./dto/filter-instace.dto";
-
+import { Tenant } from '@prisma/client';
+import { Prisma, ProductAction, ProductStatus } from '.prisma/client-tenant';
+import { ProductTransactionsService } from '../product-transactions/product-transactions.service';
+import { CreateProductInstanceDto } from './dto/create-product-instance.dto';
+import { UpdateProductInstanceDto } from './dto/update-product-instance.dto';
+import { SellInstanceDto } from './dto/sell-instance.dto';
+import { ReturnInstanceDto } from './dto/return-instance.dto';
+import { TransferInstanceDto } from './dto/transfer-instance.dto';
+import { ResellInstanceDto } from './dto/resell-instance.dto';
+import { MarkLostDto } from './dto/mark-lost.dto';
+import { FindAllProductInstanceDto } from './dto/filter-instace.dto';
 
 @Injectable()
 export class ProductInstanceService {
   constructor(
     private readonly prismaTenant: PrismaTenantService,
-    private readonly transactionService: ProductTransactionService,
+    private readonly productTransactionsService: ProductTransactionsService,
   ) {}
 
-  // -------------------------
-  // CREATE
-  // -------------------------
-  async create(tenant: Tenant, dto: CreateProductInstanceDto) {
+  // ─────────────────────────────────────────────────────────────
+  // CREATE — создание нового экземпляра товара
+  // ─────────────────────────────────────────────────────────────
+  async create(
+    tenant: Tenant,
+    organizationId: string,
+    dto: CreateProductInstanceDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // validate serial uniqueness (redundant if db has unique constraint, but nicer error)
-    const existingBySN = await client.productInstance.findUnique({
+    // 1. Проверка уникальности серийного номера
+    const existing = await client.productInstance.findUnique({
       where: { serialNumber: dto.serialNumber },
       select: { id: true },
     });
-    if (existingBySN) {
-      throw new ConflictException('Instance with this serialNumber already exists');
+    if (existing) {
+      throw new ConflictException(
+        'Экземпляр с таким серийным номером уже существует',
+      );
     }
 
-    // validate variant -> product -> organization if provided
+    // 2. Проверка варианта товара (если указан)
     if (dto.productVariantId) {
-      await this.ensureVariantAndOrg(client, dto.productVariantId, dto.organizationId);
+      const variant = await client.productVariant.findFirst({
+        where: {
+          id: dto.productVariantId,
+          product: { organizationId },
+        },
+        select: { id: true },
+      });
+      if (!variant) {
+        throw new BadRequestException(
+          'Вариант товара не найден или принадлежит другой организации',
+        );
+      }
     }
 
     const status = dto.currentStatus ?? ProductStatus.IN_STOCK;
 
-    const result = await client.$transaction(async (tx) => {
+    return client.$transaction(async (tx) => {
       const instance = await tx.productInstance.create({
         data: {
           productVariantId: dto.productVariantId ?? null,
           serialNumber: dto.serialNumber,
-          organizationId: dto.organizationId,
+          organizationId,
           currentOwnerId: dto.currentOwnerId ?? null,
           currentStatus: status,
         },
       });
 
-      // create transaction: PURCHASED / ADDED
-      await this.transactionService.create(tx, {
+      // Создаём транзакцию поступления
+      await this.productTransactionsService.create(tx, organizationId, {
         productInstanceId: instance.id,
-        fromCustomerId: null,
-        toCustomerId: dto.currentOwnerId ?? null,
-        toOrganizationId: dto.organizationId,
-        saleId: null,
         action: ProductAction.PURCHASED,
-        description: 'Instance created/added to inventory',
+        description: 'Создан новый экземпляр / поступление на склад',
       });
 
       return instance;
     });
-
-    return result;
   }
 
-
+  // ─────────────────────────────────────────────────────────────
+  // FIND ALL — список экземпляров с фильтрацией и пагинацией
+  // ─────────────────────────────────────────────────────────────
   async findAll(
     tenant: Tenant,
-    // 1. Изменяем тип второго аргумента на DTO
+    organizationId: string,
     filter: FindAllProductInstanceDto = {},
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     const page = filter.page ?? 1;
-    const limit = filter.limit ?? 10; // Исправлено на 10, как в DTO по умолчанию
+    const limit = filter.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.ProductInstanceWhereInput = { organizationId };
 
-    if (filter.productVariantId) where.productVariantId = filter.productVariantId;
-
-    if (filter.serialNumber) where.serialNumber = { contains: filter.serialNumber, mode: 'insensitive' };
-
+    if (filter.productVariantId)
+      where.productVariantId = filter.productVariantId;
+    if (filter.serialNumber)
+      where.serialNumber = {
+        contains: filter.serialNumber,
+        mode: 'insensitive',
+      };
     if (filter.status) where.currentStatus = filter.status;
-
     if (filter.currentOwnerId) where.currentOwnerId = filter.currentOwnerId;
-    if (filter.organizationId) where.organizationId = filter.organizationId;
 
     const [data, total] = await Promise.all([
       client.productInstance.findMany({
@@ -107,7 +120,7 @@ export class ProductInstanceService {
         include: {
           productVariant: { include: { product: true } },
           current_owner: true,
-          transactions: { orderBy: { date: 'desc' } },
+          transactions: { orderBy: { date: 'desc' }, take: 5 }, // последние 5 транзакций
         },
       }),
       client.productInstance.count({ where }),
@@ -118,15 +131,18 @@ export class ProductInstanceService {
       total,
       page,
       limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 
-
-  async findOne(tenant: Tenant, id: string) {
+  // ─────────────────────────────────────────────────────────────
+  // FIND ONE — детальная информация по экземпляру
+  // ─────────────────────────────────────────────────────────────
+  async findOne(tenant: Tenant, organizationId: string, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const instance = await client.productInstance.findUnique({
-      where: { id },
+    const instance = await client.productInstance.findFirst({
+      where: { id, organizationId },
       include: {
         productVariant: { include: { product: true } },
         current_owner: true,
@@ -134,79 +150,99 @@ export class ProductInstanceService {
       },
     });
 
-    if (!instance) throw new NotFoundException('ProductInstance not found');
+    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
+
     return instance;
   }
 
-
-  async update(tenant: Tenant, id: string, dto: UpdateProductInstanceDto) {
+  // ─────────────────────────────────────────────────────────────
+  // UPDATE — обновление экземпляра
+  // ─────────────────────────────────────────────────────────────
+  async update(
+    tenant: Tenant,
+    organizationId: string,
+    id: string,
+    dto: UpdateProductInstanceDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const existing = await client.productInstance.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('ProductInstance not found');
+    const existing = await client.productInstance.findFirst({
+      where: { id, organizationId },
+    });
+    if (!existing) throw new NotFoundException('Экземпляр товара не найден');
 
     if (dto.productVariantId) {
-      await this.ensureVariantAndOrg(client, dto.productVariantId, existing.organizationId);
+      const variant = await client.productVariant.findFirst({
+        where: { id: dto.productVariantId, product: { organizationId } },
+      });
+      if (!variant)
+        throw new BadRequestException(
+          'Вариант товара не найден или принадлежит другой организации',
+        );
     }
 
-    const updated = await client.$transaction(async (tx) => {
-      const res = await tx.productInstance.update({
+    return client.$transaction(async (tx) => {
+      const updated = await tx.productInstance.update({
         where: { id },
         data: {
           productVariantId: dto.productVariantId ?? existing.productVariantId,
           currentStatus: dto.currentStatus ?? existing.currentStatus,
+          currentOwnerId: dto.currentOwnerId ?? existing.currentOwnerId,
         },
       });
 
-      // create transaction if status changed
+      // Если изменился статус — логируем транзакцию
       if (dto.currentStatus && dto.currentStatus !== existing.currentStatus) {
         const action = this.mapStatusToAction(dto.currentStatus);
-        await this.transactionService.create(tx, {
+        await this.productTransactionsService.create(tx, organizationId, {
           productInstanceId: id,
           action,
-          description: `Status changed: ${existing.currentStatus} -> ${dto.currentStatus}`,
+          description: `Статус изменён: ${existing.currentStatus} → ${dto.currentStatus}`,
         });
       }
 
-      return res;
+      return updated;
     });
-
-    return updated;
   }
 
-
-  async delete(tenant: Tenant, id: string) {
+  // ─────────────────────────────────────────────────────────────
+  // DELETE — удаление экземпляра
+  // ─────────────────────────────────────────────────────────────
+  async remove(tenant: Tenant, organizationId: string, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const existing = await client.productInstance.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('ProductInstance not found');
 
-    const res = await client.$transaction(async (tx) => {
-      // optionally create a "deleted" transaction record (audit)
-      await this.transactionService.create(tx, {
+    const existing = await client.productInstance.findFirst({
+      where: { id, organizationId },
+    });
+    if (!existing) throw new NotFoundException('Экземпляр товара не найден');
+
+    return client.$transaction(async (tx) => {
+      await this.productTransactionsService.create(tx, organizationId, {
         productInstanceId: id,
-        action: ProductAction.TRANSFERRED, // reuse TRANSFERRED or choose special action if you have
-        description: 'Instance deleted from system',
+        action: ProductAction.TRANSFERRED, // или добавить ProductAction.DELETED
+        description: 'Экземпляр удалён из системы',
       });
 
       return tx.productInstance.delete({ where: { id } });
     });
-
-    return res;
   }
 
-
-  async sell(tenant: Tenant, dto: SellInstanceDto) {
+  // ─────────────────────────────────────────────────────────────
+  // SELL — продажа экземпляра
+  // ─────────────────────────────────────────────────────────────
+  async sell(tenant: Tenant, organizationId: string, dto: SellInstanceDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const instance = await client.productInstance.findUnique({ where: { id: dto.instanceId } });
-    if (!instance) throw new NotFoundException('ProductInstance not found');
+    const instance = await client.productInstance.findFirst({
+      where: { id: dto.instanceId, organizationId },
+    });
+    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
 
     if (instance.currentStatus === ProductStatus.SOLD) {
-      throw new BadRequestException('Instance is already sold');
+      throw new BadRequestException('Товар уже продан');
     }
 
-    const res = await client.$transaction(async (tx) => {
-      // update owner & status
+    return client.$transaction(async (tx) => {
       const updated = await tx.productInstance.update({
         where: { id: dto.instanceId },
         data: {
@@ -215,105 +251,105 @@ export class ProductInstanceService {
         },
       });
 
-      // create transaction
-      await this.transactionService.create(tx, {
+      await this.productTransactionsService.create(tx, organizationId, {
         productInstanceId: dto.instanceId,
         fromCustomerId: instance.currentOwnerId ?? null,
         toCustomerId: dto.customerId,
-        toOrganizationId: instance.organizationId,
         saleId: dto.saleId ?? null,
         action: ProductAction.SOLD,
-        description: dto.description ?? 'Sold to customer',
+        description: dto.description ?? 'Продажа клиенту',
       });
 
       return updated;
     });
-
-    return res;
   }
 
-  async return(tenant: Tenant, dto: ReturnInstanceDto) {
+  // ─────────────────────────────────────────────────────────────
+  // RETURN — возврат экземпляра
+  // ─────────────────────────────────────────────────────────────
+  async return(tenant: Tenant, organizationId: string, dto: ReturnInstanceDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const instance = await client.productInstance.findUnique({ where: { id: dto.instanceId } });
-    if (!instance) throw new NotFoundException('ProductInstance not found');
+    const instance = await client.productInstance.findFirst({
+      where: { id: dto.instanceId, organizationId },
+    });
+    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
 
-    const res = await client.$transaction(async (tx) => {
+    return client.$transaction(async (tx) => {
       const updated = await tx.productInstance.update({
         where: { id: dto.instanceId },
         data: {
           currentOwnerId: null,
           currentStatus: ProductStatus.RETURNED,
-          // optionally update organizationId if toOrganizationId provided
           organizationId: dto.toOrganizationId ?? instance.organizationId,
         },
       });
 
-      await this.transactionService.create(tx, {
+      await this.productTransactionsService.create(tx, organizationId, {
         productInstanceId: dto.instanceId,
         fromCustomerId: dto.fromCustomerId ?? instance.currentOwnerId ?? null,
         toCustomerId: null,
         toOrganizationId: dto.toOrganizationId ?? instance.organizationId,
-        saleId: null,
         action: ProductAction.RETURNED,
-        description: dto.description ?? 'Returned by customer',
+        description: dto.description ?? 'Возврат от клиента',
       });
 
       return updated;
     });
-
-    return res;
   }
 
-  // -------------------------
-  // TRANSFER between organizations
-  // -------------------------
-  async transfer(tenant: Tenant, dto: TransferInstanceDto) {
+  // ─────────────────────────────────────────────────────────────
+  // TRANSFER — передача между организациями
+  // ─────────────────────────────────────────────────────────────
+  async transfer(
+    tenant: Tenant,
+    organizationId: string,
+    dto: TransferInstanceDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const instance = await client.productInstance.findUnique({ where: { id: dto.instanceId } });
-    if (!instance) throw new NotFoundException('ProductInstance not found');
+    const instance = await client.productInstance.findFirst({
+      where: { id: dto.instanceId, organizationId },
+    });
+    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
 
     if (instance.organizationId === dto.toOrganizationId) {
-      throw new BadRequestException('Target organization is same as current');
+      throw new BadRequestException('Целевая организация совпадает с текущей');
     }
 
-    const res = await client.$transaction(async (tx) => {
+    return client.$transaction(async (tx) => {
       const updated = await tx.productInstance.update({
         where: { id: dto.instanceId },
         data: { organizationId: dto.toOrganizationId },
       });
 
-      await this.transactionService.create(tx, {
+      await this.productTransactionsService.create(tx, organizationId, {
         productInstanceId: dto.instanceId,
-        fromCustomerId: null,
-        toCustomerId: null,
-        toOrganizationId: dto.toOrganizationId,
-        saleId: null,
         action: ProductAction.TRANSFERRED,
-        description: dto.description ?? 'Transfer between organizations',
+        toOrganizationId: dto.toOrganizationId,
+        description: dto.description ?? 'Передача между организациями',
       });
 
       return updated;
     });
-
-    return res;
   }
 
-  // -------------------------
-  // RESELL (after return + repair)
-  // -------------------------
-  async resell(tenant: Tenant, dto: ResellInstanceDto) {
+  // ─────────────────────────────────────────────────────────────
+  // RESELL — перепродажа после возврата
+  // ─────────────────────────────────────────────────────────────
+  async resell(tenant: Tenant, organizationId: string, dto: ResellInstanceDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const instance = await client.productInstance.findUnique({ where: { id: dto.instanceId } });
-    if (!instance) throw new NotFoundException('ProductInstance not found');
+    const instance = await client.productInstance.findFirst({
+      where: { id: dto.instanceId, organizationId },
+    });
+    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
 
     if (instance.currentStatus === ProductStatus.LOST) {
-      throw new BadRequestException('Cannot resell a lost instance');
+      throw new BadRequestException('Нельзя перепродать списанный товар');
     }
 
-    const res = await client.$transaction(async (tx) => {
+    return client.$transaction(async (tx) => {
       const updated = await tx.productInstance.update({
         where: { id: dto.instanceId },
         data: {
@@ -322,33 +358,31 @@ export class ProductInstanceService {
         },
       });
 
-      await this.transactionService.create(tx, {
+      await this.productTransactionsService.create(tx, organizationId, {
         productInstanceId: dto.instanceId,
-        fromCustomerId: null,
         toCustomerId: dto.newCustomerId,
-        toOrganizationId: instance.organizationId,
         saleId: dto.saleId ?? null,
         action: ProductAction.RESOLD,
-        description: dto.description ?? 'Resold after return/repair',
+        description: dto.description ?? 'Перепродажа после возврата/ремонта',
       });
 
       return updated;
     });
-
-    return res;
   }
 
-  // -------------------------
-  // MARK LOST / WRITE-OFF
-  // -------------------------
-  async markLost(tenant: Tenant, dto: MarkLostDto) {
+  // ─────────────────────────────────────────────────────────────
+  // MARK LOST — списание / утеря
+  // ─────────────────────────────────────────────────────────────
+  async markLost(tenant: Tenant, organizationId: string, dto: MarkLostDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const instance = await client.productInstance.findUnique({ where: { id: dto.instanceId } });
-    if (!instance) throw new NotFoundException('ProductInstance not found');
+    const instance = await client.productInstance.findFirst({
+      where: { id: dto.instanceId, organizationId },
+    });
+    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
 
-    const updated = await client.$transaction(async (tx) => {
-      const u = await tx.productInstance.update({
+    return client.$transaction(async (tx) => {
+      const updated = await tx.productInstance.update({
         where: { id: dto.instanceId },
         data: {
           currentStatus: ProductStatus.LOST,
@@ -356,50 +390,19 @@ export class ProductInstanceService {
         },
       });
 
-      await this.transactionService.create(tx, {
+      await this.productTransactionsService.create(tx, organizationId, {
         productInstanceId: dto.instanceId,
-        fromCustomerId: instance.currentOwnerId ?? null,
-        toCustomerId: null,
-        toOrganizationId: instance.organizationId,
-        saleId: null,
-        action: ProductAction.TRANSFERRED, // or add a new ProductAction.LOST if you extend enum
-        description: dto.description ?? 'Marked as lost/write-off',
+        action: ProductAction.TRANSFERRED, // можно добавить ProductAction.LOST
+        description: dto.description ?? 'Списан / утерян',
       });
 
-      return u;
+      return updated;
     });
-
-    return updated;
   }
 
-  // -------------------------
-  // GET HISTORY (delegates to transaction service)
-  // -------------------------
-  async getHistory(tenant: Tenant, instanceId: string) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-
-    // transactionService expects client as first arg
-    return this.transactionService.getHistory(client, instanceId);
-  }
-
-  // -------------------------
-  // PRIVATE helpers
-  // -------------------------
-  private async ensureVariantAndOrg(client: any, variantId: string, organizationId?: string) {
-    const variant = await client.productVariant.findUnique({
-      where: { id: variantId },
-      include: { product: { select: { organizationId: true } } },
-    });
-    if (!variant) throw new NotFoundException('ProductVariant not found');
-
-    // if organizationId provided — ensure matches product.organizationId
-    if (organizationId && variant.product.organizationId !== organizationId) {
-      throw new BadRequestException('Provided organizationId does not match variant product organization');
-    }
-
-    return variant;
-  }
-
+  // ─────────────────────────────────────────────────────────────
+  // PRIVATE HELPERS
+  // ─────────────────────────────────────────────────────────────
   private mapStatusToAction(status: ProductStatus): ProductAction {
     switch (status) {
       case ProductStatus.SOLD:
@@ -407,7 +410,7 @@ export class ProductInstanceService {
       case ProductStatus.RETURNED:
         return ProductAction.RETURNED;
       case ProductStatus.LOST:
-        return ProductAction.TRANSFERRED; // or create ProductAction.LOST if you add enum
+        return ProductAction.TRANSFERRED; // или добавить ProductAction.LOST
       default:
         return ProductAction.TRANSFERRED;
     }

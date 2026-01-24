@@ -1,39 +1,22 @@
-import {
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength
-} from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsUUID, IsOptional, IsString } from 'class-validator';
 
 export class ResellInstanceDto {
-    @ApiProperty() // Для NestJS/Swagger
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-product-instance' })
   @IsUUID()
   instanceId: string;
 
-    @ApiProperty({ required: false }) // Для NestJS/Swagger
-  @IsOptional()
-  @IsString()
-  @IsUUID()
-  @Type(() => String) // Если поле идет из Query, можно добавить Type() для надежности
-  saleId?: string | null;
-
-
-    @ApiProperty() // Для NestJS/Swagger
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-new-customer' })
   @IsUUID()
   newCustomerId: string;
 
+  @ApiPropertyOptional({ example: 'uuid-new-sale' })
+  @IsOptional()
+  @IsUUID()
+  saleId?: string;
 
-    @ApiProperty({ required: false }) // Для NestJS/Swagger
+  @ApiPropertyOptional({ example: 'Перепродажа после ремонта' })
   @IsOptional()
   @IsString()
-  @MaxLength(500) // Ограничим длину, чтобы не засорять базу данных
-  @Type(() => String)
-  description?: string | null;
+  description?: string;
 }

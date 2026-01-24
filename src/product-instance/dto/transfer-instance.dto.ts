@@ -1,24 +1,17 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class TransferInstanceDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-product-instance' })
   @IsUUID()
   instanceId: string;
 
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-organization' })
   @IsUUID()
   toOrganizationId: string;
 
-  @ApiProperty({ required: false, nullable: true })
+  @ApiPropertyOptional({ example: 'Передача между филиалами' })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
-  @Type(() => String)
-  description?: string | null;
+  description?: string;
 }
