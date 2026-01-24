@@ -1,168 +1,294 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CreateOrganizationDto } from './dto/create-organization.dto';
-import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import { Tenant } from '@prisma/client';
+import { Prisma } from '.prisma/client-tenant';
+import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { GetOrganizationsQueryDto } from './dto/get-organizations-query.dto';
+import { AuditHelper } from '../audit-logs/audit.helper';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class OrganizationService {
-  constructor(private readonly prismaTenant: PrismaTenantService) {}
+  constructor(
+    private readonly prismaTenant: PrismaTenantService,
+    private readonly auditHelper: AuditHelper,
+  ) {}
 
-  async create(tenant: Tenant, createOrganizationDto: CreateOrganizationDto) {
+  async create(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: CreateOrganizationDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // 1. Проверяем существование по любому из уникальных полей
-    const existingOrg = await client.organization.findFirst({
+    // 1. Проверяем уникальность email и phone
+    const existing = await client.organization.findFirst({
       where: {
-        OR: [
-          { email: createOrganizationDto.email },
-          { phone: createOrganizationDto.phone },
-        ],
+        OR: [{ email: dto.email }, { phone: dto.phone }],
       },
     });
 
-    if (existingOrg) {
-      // Уточняем, что именно занято, для более информативного ответа
-      const isEmailTaken = existingOrg.email === createOrganizationDto.email;
-      const field = isEmailTaken ? 'email' : 'phone';
-
+    if (existing) {
+      const field = existing.email === dto.email ? 'email' : 'phone';
       throw new ConflictException(
-        `Organization with this ${field} already exists`,
+        `Организация с таким ${field} уже существует`,
       );
     }
 
-    // 2. Если всё чисто — создаем
-    return client.organization.create({
-      data: createOrganizationDto,
+    return client.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          ...dto,
+        },
+      });
+
+      // 2. Автоматически привязываем текущего пользователя как OWNER
+      await tx.organizationUser.create({
+        data: {
+          organizationId: organization.id,
+          userId: user.userId,
+          role: 'OWNER',
+          position: 'Владелец',
+        },
+      });
+
+      // 3. Логируем создание организации
+      await this.auditHelper.log(tx, organization.id, {
+        userId: user.userId,
+        action: 'CREATE',
+        entity: 'Organization',
+        entityId: organization.id,
+        newValue: {
+          name: organization.name,
+          email: organization.email,
+          phone: organization.phone,
+        },
+        note: `Создана новая организация "${organization.name}"`,
+      });
+
+      return organization;
     });
   }
 
-  async findAllForUser(tenant: Tenant, userId: string) {
+  async findAllForUser(tenant: Tenant, user: JwtAuthenticatedUser) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     return client.organization.findMany({
       where: {
         org_users: {
           some: {
-            userId: userId,
+            userId: user.userId,
           },
         },
       },
       include: {
         org_users: {
-          where: { userId },
+          where: { userId: user.userId },
           select: { role: true, position: true },
         },
         settings: true,
+        kassas: {
+          select: { id: true, name: true, type: true, balance: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOneForUser(tenant: Tenant, userId: string, orgId: string) {
+  async findOneForUser(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    orgId: string,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const org = await client.organization.findFirst({
+    const organization = await client.organization.findFirst({
       where: {
         id: orgId,
         org_users: {
           some: {
-            userId: userId,
+            userId: user.userId,
           },
         },
       },
       include: {
         org_users: {
-          where: { userId },
+          where: { userId: user.userId },
           select: { role: true, position: true },
         },
         settings: true,
+        kassas: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            balance: true,
+            currency: true,
+          },
+        },
+        products: {
+          select: { id: true, name: true, code: true },
+          take: 5, // последние 5 товаров
+        },
+      },
+    });
+
+    if (!organization) {
+      throw new NotFoundException(
+        'Организация не найдена или у вас нет доступа',
+      );
+    }
+
+    return organization;
+  }
+
+  async findAll(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    query: GetOrganizationsQueryDto,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const { search, order = 'desc', sortField = 'createdAt' } = query;
+
+    const where: Prisma.OrganizationWhereInput = {};
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    return client.organization.findMany({
+      where,
+      orderBy: { [sortField]: order },
+      include: {
+        org_users: {
+          select: { userId: true, role: true },
+          take: 3,
+        },
+        settings: true,
+      },
+    });
+  }
+
+  async findById(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const org = await client.organization.findUnique({
+      where: { id },
+      include: {
+        org_users: true,
+        settings: true,
         kassas: true,
-        // что нужно
+        products: true,
       },
     });
 
     if (!org) {
-      throw new NotFoundException('Organization not found or access denied');
+      throw new NotFoundException('Организация не найдена');
     }
 
-    return org;
-  }
-
-  async findAll(tenant: Tenant, query: GetOrganizationsQueryDto) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-
-    const { search, order = 'desc', sortField = 'createdAt' } = query;
-
-    return client.organization.findMany({
-      where: search
-        ? {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : undefined,
-
-      orderBy: {
-        [sortField]: order,
-      },
-    });
-  }
-
-  findById(tenant: Tenant, id: string) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const org = client.organization.findUnique({
-      where: { id },
-    });
     return org;
   }
 
   async update(
     tenant: Tenant,
+    user: JwtAuthenticatedUser,
     id: string,
-    updateOrganizationDto: UpdateOrganizationDto,
+    dto: UpdateOrganizationDto,
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Проверяем, существует ли организация
-    const existing = await client.organization.findUnique({ where: { id } });
+    const existing = await client.organization.findUnique({
+      where: { id },
+    });
+
     if (!existing) {
-      throw new Error(`Organization with id ${id} not found`);
+      throw new NotFoundException('Организация не найдена');
     }
 
-    // Обновляем только переданные поля
-    return client.organization.update({
-      where: { id },
-      data: {
-        ...updateOrganizationDto,
-      },
+    return client.$transaction(async (tx) => {
+      const updated = await tx.organization.update({
+        where: { id },
+        data: dto,
+      });
+
+      // Логируем обновление
+      await this.auditHelper.log(tx, id, {
+        userId: user.userId,
+        action: 'UPDATE',
+        entity: 'Organization',
+        entityId: id,
+        oldValue: {
+          name: existing.name,
+          email: existing.email,
+          phone: existing.phone,
+        },
+        newValue: {
+          name: updated.name,
+          email: updated.email,
+          phone: updated.phone,
+        },
+        note: `Обновлена организация "${updated.name}"`,
+      });
+
+      return updated;
     });
   }
 
-  async remove(tenant: Tenant, id: string) {
+  async remove(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const exisiting = await client.organization.findUnique({ where: { id } });
-    if (!exisiting) {
-      throw new Error(`Organization with id ${id} not found`);
+    const organization = await client.organization.findUnique({
+      where: { id },
+      include: { org_users: true },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Организация не найдена');
     }
 
-    await client.organization.delete({ where: { id } });
+    // Проверяем, что пользователь — OWNER этой организации
+    const userRole = organization.org_users.find(
+      (u) => u.userId === user.userId,
+    )?.role;
+    if (userRole !== 'OWNER') {
+      throw new ForbiddenException('Только владелец может удалить организацию');
+    }
 
-    // await client.$transaction([
-    //   client.organizationUser.deleteMany({ where: { organizationId: id } }),
-    //   client.organizationCustomer.deleteMany({ where: { organizationId: id } }),
-    //   client.kassa.deleteMany({ where: { organizationId: id } }),
-    //   client.payment.deleteMany({ where: { organizationId: id } }),
-    //   // ...
-    //   client.organization.delete({ where: { id } }),
-    // ]);
+    return client.$transaction(async (tx) => {
+      // Логируем удаление
+      await this.auditHelper.log(tx, id, {
+        userId: user.userId,
+        action: 'DELETE',
+        entity: 'Organization',
+        entityId: id,
+        oldValue: {
+          name: organization.name,
+          email: organization.email,
+        },
+        note: `Удалена организация "${organization.name}"`,
+      });
+
+      // Удаляем связанные записи (кассы, товары, клиенты и т.д.)
+      await Promise.all([
+        tx.organizationUser.deleteMany({ where: { organizationId: id } }),
+        tx.organizationCustomer.deleteMany({ where: { organizationId: id } }),
+        tx.kassa.deleteMany({ where: { organizationId: id } }),
+        tx.product.deleteMany({ where: { organizationId: id } }),
+        // ... другие связанные таблицы
+        tx.organization.delete({ where: { id } }),
+      ]);
+
+      return { message: 'Организация успешно удалена' };
+    });
   }
 }

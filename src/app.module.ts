@@ -40,6 +40,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { ProductTransactionsModule } from './product-transactions/product-transactions.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { DocumentsModule } from './documents/documents.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { DocumentsModule } from './documents/documents.module';
     ProductTransactionsModule,
     AuditLogsModule,
     DocumentsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

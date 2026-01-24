@@ -1,30 +1,39 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
-  UseGuards,
+  Get,
+  Param,
+  Patch,
+  Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { GetOrganizationsQueryDto } from './dto/get-organizations-query.dto';
 import { ApiKeyGuard } from '../guards/api-key.guard';
-import { CurrentTenant } from '../decorators/currectTenant.decorator';
-import type { Tenant } from '@prisma/client';
-import { ApiOperation, ApiParam, ApiSecurity } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
-import { GetOrganizationsQueryDto } from './dto/get-organizations-query.dto';
+import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
-import type { JwtUser } from '../tenant-auth/interfaces/jwt.interface';
+import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
+@ApiTags('Organizations')
 @ApiSecurity('x-tenant-key')
+@ApiBearerAuth()
 @Controller('organization')
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
@@ -32,61 +41,93 @@ export class OrganizationController {
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Создать новую организацию' })
   create(
     @CurrentTenant() tenant: Tenant,
-    @Body() createOrganizationDto: CreateOrganizationDto,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateOrganizationDto,
   ) {
-    return this.organizationService.create(tenant, createOrganizationDto);
-  }
-
-  @Get('admin/all')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  adminfindAll(
-    @CurrentTenant() tenant: Tenant,
-    @Query() query: GetOrganizationsQueryDto,
-  ) {
-    return this.organizationService.findAll(tenant, query);
-  }
-
-  @Get('admin/:id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  adminfindOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.organizationService.findById(tenant, id);
+    return this.organizationService.create(tenant, user, dto);
   }
 
   @Get('all')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  findAll(@CurrentTenant() tenant: Tenant, @CurrentTenantUser() user: JwtUser) {
-    return this.organizationService.findAllForUser(tenant, user.userId);
+  @ApiOperation({
+    summary: 'Получить список всех организаций текущего пользователя',
+  })
+  findAllForUser(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+  ) {
+    return this.organizationService.findAllForUser(tenant, user);
   }
 
   @Get(':id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  async findOne(
+  @ApiOperation({
+    summary: 'Получить организацию по ID (только если есть доступ)',
+  })
+  @ApiParam({ name: 'id', description: 'ID организации' })
+  findOneForUser(
     @CurrentTenant() tenant: Tenant,
-    @CurrentTenantUser() user: JwtUser,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
   ) {
-    return this.organizationService.findOneForUser(tenant, user.userId, id);
+    return this.organizationService.findOneForUser(tenant, user, id);
+  }
+
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Получить список всех организаций (для админа)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'sortField', required: false })
+  findAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetOrganizationsQueryDto,
+  ) {
+    return this.organizationService.findAll(tenant, user, query);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Получить организацию по ID (для админа)' })
+  @ApiParam({ name: 'id' })
+  findOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.organizationService.findById(tenant, user, id);
   }
 
   @Patch('update/:id')
-  @ApiOperation({ summary: 'Update organization partially' })
-  @ApiParam({ name: 'id', type: String, description: 'Organization ID' })
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Обновить организацию' })
+  @ApiParam({ name: 'id' })
   update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
-    @Body() updateOrganizationDto: UpdateOrganizationDto,
+    @Body() dto: UpdateOrganizationDto,
   ) {
-    return this.organizationService.update(tenant, id, updateOrganizationDto);
+    return this.organizationService.update(tenant, user, id, dto);
   }
 
   @Delete('remove/:id/hard')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.OWNER)
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.organizationService.remove(tenant, id);
+  @ApiOperation({ summary: 'Жёсткое удаление организации (только OWNER)' })
+  @ApiParam({ name: 'id' })
+  remove(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.organizationService.remove(tenant, user, id);
   }
 }

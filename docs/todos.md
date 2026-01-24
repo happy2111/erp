@@ -57,7 +57,7 @@
 - [X] замена tenant.id на organization.id
 - [x] DocumentsModule (прикреплённые файлы, счета, акты)
 - [ ] Notifications (если будут push/email/sms)
-- [ ] Reports / Analytics (отчёты по продажам, остаткам, долгам)
+- [X] Reports / Analytics (отчёты по продажам, остаткам, долгам)
 - [ ] Swagger + API документация
 - [ ] Unit + E2E тесты
 - [ ] Rate limiting, security headers, CORSnk
