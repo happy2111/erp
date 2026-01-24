@@ -19,11 +19,11 @@ import { KassasService } from '../kassas/kassas.service';
 import { StocksService } from '../stocks/stocks.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CodeGeneratorService } from '../code-generater/code-generater.service';
-import { SaleFilterDto } from '../product-transaction/dto/sale-filter.dto';
-import { UpdateSaleDto } from '../product-transaction/dto/update-sale.dto';
 import { InstallmentsService } from '../installments/installments.service';
 import { InstallmentWithCustomer } from '../installments/types/installment';
 import { TransactionsService } from '../transactions/transactions.service';
+import { SaleFilterDto } from './dto/sale-filter.dto';
+import { UpdateSaleDto } from './dto/update-sale.dto';
 
 @Injectable()
 export class SalesService {
@@ -228,7 +228,6 @@ export class SalesService {
           );
         }
       }
-
 
       // Возвращаем продажу + созданную рассрочку (если была)
       return {

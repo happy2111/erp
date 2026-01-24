@@ -10,7 +10,6 @@ import {
 import { Type } from 'class-transformer';
 import { SaleStatus } from '.prisma/client-tenant';
 
-// Импортируем из InstallmentsModule
 import { CreateInstallmentDto } from '../../installments/dto/create-installment.dto';
 
 export class CreateSaleItemDto {

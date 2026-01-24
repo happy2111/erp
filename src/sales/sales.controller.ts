@@ -1,4 +1,3 @@
-// sales/sales.controller.ts
 import {
   Body,
   Controller,
@@ -27,8 +26,8 @@ import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import type { Tenant } from '@prisma/client';
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { SaleFilterDto } from '../product-transaction/dto/sale-filter.dto';
-import { UpdateSaleDto } from '../product-transaction/dto/update-sale.dto';
+import { SaleFilterDto } from './dto/sale-filter.dto';
+import { UpdateSaleDto } from './dto/update-sale.dto';
 
 @ApiTags('Sales')
 @ApiSecurity('x-tenant-key')

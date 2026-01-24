@@ -49,8 +49,8 @@
 ## История и аудит
 
 - [X] TransactionsModule (движение денег, баланс клиента)
-- [ ] ProductTransactionsModule (история перемещений товаров)
-- [ ] AuditLogsModule (журнал действий пользователей)
+- [X] ProductTransactionsModule (история перемещений товаров)
+- [x] AuditLogsModule (журнал действий пользователей)
 
 ## Дополнительно / позже
 
