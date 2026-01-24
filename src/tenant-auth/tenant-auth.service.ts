@@ -43,7 +43,6 @@ export class TenantAuthService {
     const client = await this.prismaTenant.getTenantClientById(tenant.id);
     const loginType = this.determineLoginType(dto.login);
 
-    // findUser должен возвращать UserWithAuthRelations | null
     const user = await this.findUser(client, dto, loginType);
 
     if (!user) {
@@ -92,13 +91,25 @@ export class TenantAuthService {
 
   async refresh(res: Response, req: Request, tenant: Tenant) {
     const token = req.cookies?.refreshToken as string | undefined;
-    if (!token) throw new UnauthorizedException('No refresh token provided');
+    if (!token) {
+      throw new UnauthorizedException('No refresh token provided');
+    }
 
     let payload: JwtPayload;
     try {
       payload = this.jwtService.verify(token);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (payload.purpose === 'ORG_SELECTION') {
+      throw new UnauthorizedException(
+        'ORG_SELECTION token cannot be refreshed',
+      );
+    }
+
+    if (!payload.orgUserId || !payload.orgId) {
+      throw new UnauthorizedException('Invalid refresh token payload');
     }
 
     const client = await this.prismaTenant.getTenantClientById(tenant.id);
@@ -251,11 +262,10 @@ export class TenantAuthService {
   }
 
   private async findUser(
-    client: Prisma.TransactionClient, // Заменяем any на Prisma.TransactionClient
+    client: Prisma.TransactionClient,
     dto: TenantLoginDto,
     loginType: 'email' | 'phone' | 'unknown',
   ): Promise<UserWithAuthRelations | null> {
-    // Типизируем include через Prisma.UserInclude
     const commonInclude: Prisma.UserInclude = {
       profile: true,
       phone_numbers: true,

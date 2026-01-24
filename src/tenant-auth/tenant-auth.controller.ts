@@ -70,10 +70,6 @@ export class TenantAuthController {
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtUser,
   ) {
-    if (!('purpose' in user) || user.purpose !== 'ORG_SELECTION') {
-      throw new UnauthorizedException();
-    }
-
     return this.authService.switchOrganization(
       res,
       tenant,
