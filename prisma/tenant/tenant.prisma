@@ -798,8 +798,10 @@ model Document {
   customerId     String?      @map("customer_id") /* ID клиента, если документ связан с клиентом */
   saleId         String?      @map("sale_id") /* ID продажи, если документ прикреплён к продаже */
   type           DocumentType /* Тип документа, пример: INVOICE, CONTRACT */
-  fileUrl        String       @map("file_url") /* Ссылка на файл документа, пример: "https://example.com/invoice_001.pdf" */
+  fileUrl        String?      @map("file_url") /* Ссылка на файл документа, пример: "https://example.com/invoice_001.pdf" */
+  filename       String /* Оригинальное имя файла для отображения, например: "Счёт-фактура №123.pdf" */
   uploadedById   String?      @map("uploaded_by") /* ID пользователя, загрузившего документ */
+  key            String /* Уникальный ключ файла в хранилище, пример: "org123/invoices/invoice_001.pdf" */
   uploadedBy     User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull) /* Связь с пользователем, загрузившим файл */
   createdAt      DateTime     @default(now()) @map("created_at") /* Дата загрузки документа */
 
