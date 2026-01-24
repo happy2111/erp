@@ -12,11 +12,11 @@ import { execa } from 'execa';
 import { OrganizationUserService } from '../organization-user/organization-user.service';
 import { OrganizationService } from '../organization/organization.service';
 import { CreateTenantUserDto } from '../tenant-user/dto/create-tenant-user.dto';
-import * as bcrypt from 'bcrypt';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { TenantFilterDto } from './dto/filter-tenant.dto';
-import { Prisma, Tenant } from '@prisma/client';
+import { Prisma, Tenant, User } from '@prisma/client';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 
 @Injectable()
 export class TenantsService {
@@ -25,6 +25,7 @@ export class TenantsService {
     private configService: ConfigService,
     private readonly organization: OrganizationService,
     private readonly organizationUserService: OrganizationUserService,
+    private readonly prismaTenant: PrismaTenantService,
   ) {}
 
   async createTenant(
@@ -53,7 +54,7 @@ export class TenantsService {
       '123456',
     );
 
-    const tenantData: any = {
+    const tenantData: Prisma.TenantCreateInput = {
       name,
       dbName,
       dbUser,
@@ -62,16 +63,18 @@ export class TenantsService {
       dbPort,
       status: 'ACTIVE',
       apiKey,
-      ...(hostname ? { hostname } : {}),
+      hostname: hostname || null,
     };
 
-    let owner: any = null;
+    let owner: User | null = null;
 
     if (ownerId) {
       owner = await this.prisma.user.findUnique({ where: { id: ownerId } });
       if (!owner) throw new NotFoundException('Owner not found');
 
-      tenantData.ownerId = ownerId;
+      tenantData.owner = {
+        connect: { id: ownerId },
+      };
       tenantData.auditTenantCreations = {
         create: {
           createdBy: ownerId,
@@ -87,7 +90,7 @@ export class TenantsService {
       await this.createDatabase(dbName, dbUser, dbPassword, dbHost, dbPort);
       await this.runMigrations(dbName, dbUser, dbPassword, dbHost, dbPort);
 
-      const organization = await this.organization.create(tenant, {
+      const organization = await this.organization.createWithoutUser(tenant, {
         name: 'Test',
       });
 
@@ -139,8 +142,12 @@ export class TenantsService {
         data: { status: 'INACTIVE' },
       });
 
+      // Проверяем тип ошибки
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+
       throw new InternalServerErrorException(
-        `Failed to create tenant database: ${error.message}`,
+        `Failed to create tenant database: ${errorMessage}`,
       );
     }
   }
@@ -344,6 +351,7 @@ export class TenantsService {
       await client.query(`CREATE DATABASE "${dbName}";`);
       console.log(`✅ Tenant database ${dbName} created`);
     } catch (err: any) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       if (err.code === '42P04') {
         console.log(`⚠️ Database ${dbName} already exists`);
       } else {
@@ -428,7 +436,11 @@ export class TenantsService {
 
     console.log(`🔄 Updating ${tenants.length} tenant databases...`);
 
-    const results = [];
+    const results: {
+      tenant: string;
+      status: 'success' | 'failed';
+      error?: string;
+    }[] = [];
 
     for (const tenant of tenants) {
       try {
@@ -439,15 +451,15 @@ export class TenantsService {
           tenant.dbHost,
           tenant.dbPort,
         );
-        // @ts-ignore
         results.push({ tenant: tenant.name, status: 'success' });
         console.log(`✅ Updated ${tenant.dbName}`);
       } catch (error) {
-        // @ts-ignore
+        const message = error instanceof Error ? error.message : String(error);
+
         results.push({
           tenant: tenant.name,
           status: 'failed',
-          error: error.message,
+          error: message,
         });
         console.error(`❌ Failed to update ${tenant.dbName}:`, error);
       }

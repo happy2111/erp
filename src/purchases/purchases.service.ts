@@ -10,7 +10,6 @@ import { PaymentType, Prisma, PurchaseStatus } from '.prisma/client-tenant';
 import { StocksService } from '../stocks/stocks.service';
 import { KassasService } from '../kassas/kassas.service';
 import { AuditHelper } from '../audit-logs/audit.helper';
-import { TransactionsService } from '../transactions/transactions.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { PurchaseFilterDto } from './dto/purchase-filter.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
@@ -24,7 +23,6 @@ export class PurchasesService {
     private readonly codeGenerator: CodeGeneratorService,
     private readonly stocksService: StocksService,
     private readonly kassasService: KassasService,
-    private readonly transactionsService: TransactionsService,
     private readonly auditHelper: AuditHelper,
   ) {}
 
@@ -441,7 +439,7 @@ export class PurchasesService {
         });
       }
 
-      const updated = await tx.purchase.update({
+      await tx.purchase.update({
         where: { id: purchaseId },
         data: {
           status: PurchaseStatus.PAID,

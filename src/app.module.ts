@@ -41,6 +41,7 @@ import { ProductTransactionsModule } from './product-transactions/product-transa
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ReportsModule } from './reports/reports.module';
+import { ReturnsModule } from './returns/returns.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { ReportsModule } from './reports/reports.module';
     AuditLogsModule,
     DocumentsModule,
     ReportsModule,
+    ReturnsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

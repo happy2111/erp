@@ -91,6 +91,7 @@ model Organization {
   settings          Settings? /* Настройки, уникальные для организации (например, валюта по умолчанию) */
   audit_logs        AuditLog[] /* Журнал действий пользователей внутри организации */
   documents         Document[] /* Документы, связанные с организацией (накладные, акты и т.д.) */
+  returns           Return[]
 
   @@map("organizations")
 }
@@ -127,6 +128,7 @@ model User {
   audit_logs           AuditLog[] /* Лог действий пользователя в системе (например, авторизация, редактирование данных) */
   documents            Document[] /* Документы, созданные или загруженные пользователем */
   installment_payments InstallmentPayment[] /* Платежи по рассрочке, проведённые пользователем */
+  returns              Return[]
 
   @@map("users")
 }
@@ -255,6 +257,7 @@ model OrganizationCustomer {
 
   transactionsFrom ProductTransaction[] @relation("from_customer")
   transactionsTo   ProductTransaction[] @relation("to_customer")
+  returns          Return[]
 
   @@map("organization_customers")
 }
@@ -341,6 +344,7 @@ model ProductVariant {
   purchase_items  PurchaseItem[] /* Закупки, связанные с этим товаром */
   sele_items      SaleItem[] /* Продажи, в которых участвовал данный товар */
   images          ProductImage[] /* Изображения варианта товара */
+  return_items    ReturnItem[]
 
   @@map("product_variants") /* Название таблицы в базе данных */
 }
@@ -654,6 +658,7 @@ model Sale {
   updatedAt    DateTime      @updatedAt @map("updated_at") /* Дата последнего обновления */
   installments Installment[] /* Рассрочки, оформленные по этой продаже */
   documents    Document[] /* Документы (чеки, договоры, счета-фактуры и т.п.) */
+  returns      Return[]
 
   @@map("sales") /* Название таблицы в базе данных */
 }
@@ -764,6 +769,51 @@ model Installment {
   payments InstallmentPayment[] /* Платежи, внесенные по этой рассрочке */
 
   @@map("installments") /* Название таблицы в базе данных */
+}
+
+/**
+ * Модель Return хранит информацию о возвратах товаров от клиентов.
+ * Связана с продажей, клиентом и конкретными позициями.
+ */
+model Return {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  saleId         String?      @map("sale_id") // Связь с исходной продажей
+  customerId     String       @map("customer_id") // Клиент, который вернул товар
+  status         ReturnStatus @default(PENDING)
+  reason         String? // Причина возврата
+  totalAmount    Decimal // Общая сумма возврата
+  refundedAmount Decimal      @default(0) // Сколько уже вернули денег
+  notes          String? // Примечания менеджера
+  approvedById   String?      @map("approved_by") // Кто одобрил возврат
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sale         Sale?                @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  customer     OrganizationCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  approvedBy   User?                @relation(fields: [approvedById], references: [id], onDelete: SetNull)
+  items        ReturnItem[]
+
+  @@map("returns")
+}
+
+/**
+ * Позиции в возврате (какой товар, сколько, по какой цене)
+ */
+model ReturnItem {
+  id               String  @id @default(uuid())
+  returnId         String  @map("return_id")
+  saleItemId       String? @map("sale_item_id") // Связь с позицией в исходной продаже
+  productVariantId String  @map("product_variant_id")
+  quantity         Int
+  price            Decimal // Цена за единицу на момент продажи
+  total            Decimal // Итого по позиции = quantity * price
+
+  returns        Return         @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+
+  @@map("return_items")
 }
 
 /**
@@ -964,4 +1014,12 @@ enum PriceType {
   WHOLESALE // Оптовая цена, при больших объёмах
   ONLINE // цена в интернет-магазине (Click / Telegram)
   SPECIAL // индивидуальная скидка / промо
+}
+
+enum ReturnStatus {
+  PENDING // Ожидает рассмотрения
+  APPROVED // Одобрен
+  REFUNDED // Деньги возвращены
+  REJECTED // Отклонён
+  CANCELLED // Отменён
 }
