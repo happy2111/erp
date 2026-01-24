@@ -63,7 +63,7 @@
 - [ ] Rate limiting, security headers, CORSnk
 - [X] Автоматическая проверка просрочки Можно добавить cron-задачу (например, через @nestjs/schedule), которая каждый день проверяет dueDate и меняет статус на OVERDUE.
 - [X] Отмена рассрочки Можно добавить метод cancelInstallment, который вернёт статус CANCELLED и скорректирует баланс клиента.
-- [ ] Добавить модуль возвратов (ReturnsModule)?
+- [X] Добавить модуль возвратов (ReturnsModule)?
 - [ ] Полная проверка правы на контролерах (Roles)
 - [ ] csrf middleware
 

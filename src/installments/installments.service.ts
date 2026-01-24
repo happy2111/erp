@@ -137,19 +137,15 @@ export class InstallmentsService {
       });
 
       // 3. Основной платёж (приход в кассу)
-      await this.paymentsService.create(
-        tenant,
-        {
-          type: PaymentType.INCOME,
-          amount: Number(amountDecimal),
-          currencyId: installment.sale.currencyId,
-          kassaId: dto.kassaId,
-          customerId: installment.customerId,
-          saleId: installment.saleId,
-          description: `Платёж по рассрочке #${installment.id} (${dto.note || 'без комментария'})`,
-        },
-        user,
-      );
+      await this.paymentsService.create(tenant, user, {
+        type: PaymentType.INCOME,
+        amount: Number(amountDecimal),
+        currencyId: installment.sale.currencyId,
+        kassaId: dto.kassaId,
+        customerId: installment.customerId,
+        saleId: installment.saleId,
+        description: `Платёж по рассрочке #${installment.id} (${dto.note || 'без комментария'})`,
+      });
 
       // 4. Обновляем рассрочку
       const newPaid = new Prisma.Decimal(installment.paidAmount).add(

@@ -76,6 +76,16 @@ export class OrganizationService {
     });
   }
 
+  async createWithoutUser(tenant: Tenant, dto: CreateOrganizationDto) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organization = await client.organization.create({
+      data: {
+        ...dto,
+      },
+    });
+    return organization;
+  }
+
   async findAllForUser(tenant: Tenant, user: JwtAuthenticatedUser) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
