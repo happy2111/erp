@@ -10,6 +10,18 @@ export interface JwtPayload {
   purpose?: 'ORG_SELECTION';
 }
 
-export interface JwtUser extends Omit<JwtPayload, 'sub'> {
+export type JwtOrgSelectionUser = {
   userId: string;
-}
+  tenantId: string;
+  purpose: 'ORG_SELECTION';
+};
+
+export type JwtAuthenticatedUser = {
+  userId: string;
+  tenantId: string;
+  orgId: string;
+  orgUserId: string;
+  role: OrgUserRole;
+};
+
+export type JwtUser = JwtOrgSelectionUser | JwtAuthenticatedUser;

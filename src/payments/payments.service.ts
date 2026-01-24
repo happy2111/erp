@@ -9,16 +9,22 @@ import { Prisma, PaymentType, RelatedType } from '.prisma/client-tenant';
 import { KassasService } from '../kassas/kassas.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentFilterDto } from './dto/payment-filter.dto';
-
+import { TransactionsService } from '../transactions/transactions.service';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     private readonly prismaTenant: PrismaTenantService,
     private readonly kassasService: KassasService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
-  async create(tenant: Tenant, dto: CreatePaymentDto) {
+  async create(
+    tenant: Tenant,
+    dto: CreatePaymentDto,
+    user: JwtAuthenticatedUser | null,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     // 1. Проверяем кассу
@@ -66,7 +72,7 @@ export class PaymentsService {
     if (dto.type === PaymentType.EXPENSE || dto.type === PaymentType.TRANSFER) {
       if (kassa.balance.lessThan(amountDecimal)) {
         throw new BadRequestException(
-          `Недостаточно средств на кассе ${kassa.name}. Баланс: ${kassa.balance}, требуется: ${dto.amount}`,
+          `Недостаточно средств на кассе ${kassa.name}. Баланс: ${kassa.balance.toString()}, требуется: ${dto.amount}`,
         );
       }
     }
@@ -138,41 +144,54 @@ export class PaymentsService {
       }
 
       // Создаём запись в Transaction
-      let balanceAfter: Prisma.Decimal;
+      // let balanceAfter: Prisma.Decimal;
+      // if (dto.customerId) {
+      //   const lastTransaction = await tx.transaction.findFirst({
+      //     where: { customerId: dto.customerId, currencyId: dto.currencyId },
+      //     orderBy: { date: 'desc' },
+      //   });
+      //
+      //   const previousBalance = lastTransaction
+      //     ? lastTransaction.balanceAfter
+      //     : new Prisma.Decimal(0);
+      //
+      //   balanceAfter =
+      //     dto.type === PaymentType.INCOME
+      //       ? previousBalance.add(amountDecimal)
+      //       : previousBalance.sub(amountDecimal);
+      //
+      //   await tx.transaction.create({
+      //     data: {
+      //       organizationId: tenant.id,
+      //       customerId: dto.customerId,
+      //       relatedType: RelatedType.PAYMENT,
+      //       relatedId: payment.id,
+      //       date: new Date(),
+      //       debit:
+      //         dto.type === PaymentType.INCOME
+      //           ? amountDecimal
+      //           : new Prisma.Decimal(0),
+      //       credit:
+      //         dto.type === PaymentType.EXPENSE
+      //           ? amountDecimal
+      //           : new Prisma.Decimal(0),
+      //       balanceAfter,
+      //       currencyId: dto.currencyId,
+      //       description: dto.description || `Платёж #${payment.id}`,
+      //     },
+      //   });
+      // }
+
       if (dto.customerId) {
-        const lastTransaction = await tx.transaction.findFirst({
-          where: { customerId: dto.customerId, currencyId: dto.currencyId },
-          orderBy: { date: 'desc' },
-        });
-
-        const previousBalance = lastTransaction
-          ? lastTransaction.balanceAfter
-          : new Prisma.Decimal(0);
-
-        balanceAfter =
-          dto.type === PaymentType.INCOME
-            ? previousBalance.add(amountDecimal)
-            : previousBalance.sub(amountDecimal);
-
-        await tx.transaction.create({
-          data: {
-            organizationId: tenant.id,
-            customerId: dto.customerId,
-            relatedType: RelatedType.PAYMENT,
-            relatedId: payment.id,
-            date: new Date(),
-            debit:
-              dto.type === PaymentType.INCOME
-                ? amountDecimal
-                : new Prisma.Decimal(0),
-            credit:
-              dto.type === PaymentType.EXPENSE
-                ? amountDecimal
-                : new Prisma.Decimal(0),
-            balanceAfter,
-            currencyId: dto.currencyId,
-            description: dto.description || `Платёж #${payment.id}`,
-          },
+        await this.transactionsService.createFromPayment(tx, tenant.id, {
+          customerId: dto.customerId,
+          relatedType: RelatedType.PAYMENT,
+          relatedId: payment.id,
+          amount: Number(amountDecimal),
+          type: dto.type,
+          currencyId: dto.currencyId,
+          description: dto.description || `Платёж #${payment.id}`,
+          createdById: user?.orgUserId,
         });
       }
 

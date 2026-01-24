@@ -17,6 +17,8 @@ import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { CreateInstallmentPaymentDto } from './dto/create-installment-payment.dto';
 import { InstallmentFilterDto } from './dto/installment-filter.dto';
 import { CancelInstallmentDto } from './dto/cancel-installment.dto';
+import { TransactionsService } from '../transactions/transactions.service';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class InstallmentsService {
@@ -24,6 +26,7 @@ export class InstallmentsService {
     private readonly prismaTenant: PrismaTenantService,
     private readonly paymentsService: PaymentsService,
     private readonly kassasService: KassasService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async create(tenant: Tenant, dto: CreateInstallmentDto) {
@@ -81,7 +84,11 @@ export class InstallmentsService {
     });
   }
 
-  async addPayment(tenant: Tenant, dto: CreateInstallmentPaymentDto) {
+  async addPayment(
+    tenant: Tenant,
+    dto: CreateInstallmentPaymentDto,
+    user: JwtAuthenticatedUser | null,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     return client.$transaction(async (tx) => {
@@ -104,21 +111,25 @@ export class InstallmentsService {
           installmentId: dto.installmentId,
           amount: amountDecimal,
           paymentMethod: dto.paymentMethod,
-          createdById: null, // можно передать из @CurrentUser()
+          createdById: user?.orgUserId,
           note: dto.note,
         },
       });
 
       // 2. Создаём основной платёж (приход в кассу)
-      await this.paymentsService.create(tenant, {
-        type: PaymentType.INCOME,
-        amount: Number(amountDecimal),
-        currencyId: installment.sale.currencyId,
-        kassaId: dto.kassaId,
-        customerId: installment.customerId,
-        saleId: installment.saleId,
-        description: `Платёж по рассрочке #${installment.id} (${dto.note || 'без комментария'})`,
-      });
+      await this.paymentsService.create(
+        tenant,
+        {
+          type: PaymentType.INCOME,
+          amount: Number(amountDecimal),
+          currencyId: installment.sale.currencyId,
+          kassaId: dto.kassaId,
+          customerId: installment.customerId,
+          saleId: installment.saleId,
+          description: `Платёж по рассрочке #${installment.id} (${dto.note || 'без комментария'})`,
+        },
+        user,
+      );
 
       // 3. Обновляем рассрочку
       const newPaid = new Prisma.Decimal(installment.paidAmount).add(
@@ -147,32 +158,14 @@ export class InstallmentsService {
       });
 
       // 4. Создаём запись в Transaction
-      const lastTransaction = await tx.transaction.findFirst({
-        where: {
-          customerId: installment.customerId,
-          currencyId: installment.sale.currencyId,
-        },
-        orderBy: { date: 'desc' },
-      });
-
-      const previousBalance = lastTransaction
-        ? lastTransaction.balanceAfter
-        : new Prisma.Decimal(0);
-      const balanceAfter = previousBalance.add(amountDecimal);
-
-      await tx.transaction.create({
-        data: {
-          organizationId: tenant.id,
-          customerId: installment.customerId,
-          relatedType: RelatedType.PAYMENT,
-          relatedId: installmentPayment.id,
-          date: new Date(),
-          debit: amountDecimal,
-          credit: new Prisma.Decimal(0),
-          balanceAfter,
-          currencyId: installment.sale.currencyId,
-          description: `Платёж по рассрочке #${installment.id}`,
-        },
+      await this.transactionsService.createFromPayment(tx, tenant.id, {
+        customerId: installment.customerId,
+        relatedType: RelatedType.PAYMENT,
+        relatedId: installmentPayment.id,
+        amount: Number(amountDecimal),
+        type: PaymentType.INCOME,
+        currencyId: installment.sale.currencyId,
+        description: `Платёж по рассрочке #${installment.id}`,
       });
 
       return installmentPayment;

@@ -608,6 +608,7 @@ model Transaction {
   balanceAfter   Decimal     @map("balance_after") /* Баланс клиента после транзакции, пример: 50000.00 */
   currencyId     String      @map("currency_id") /* ID валюты, в которой совершена операция */
   description    String? /* Необязательное описание транзакции, пример: "Оплата по счёту №1234" */
+  createdById    String?     @map("created_by_id") /*ID пользователя, создавшего запись */
 
   organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict) /* Связь с организацией */
   customer     OrganizationCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict) /* Связь с клиентом или контрагентом */

@@ -26,6 +26,8 @@ import type { Tenant } from '@prisma/client';
 import { CreateInstallmentPaymentDto } from './dto/create-installment-payment.dto';
 import { InstallmentFilterDto } from './dto/installment-filter.dto';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @ApiTags('Installments')
 @ApiSecurity('x-tenant-key')
@@ -54,8 +56,9 @@ export class InstallmentsController {
   addPayment(
     @CurrentTenant() tenant: Tenant,
     @Body() dto: CreateInstallmentPaymentDto,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
   ) {
-    return this.installmentsService.addPayment(tenant, dto);
+    return this.installmentsService.addPayment(tenant, dto, user);
   }
 
   @Get()

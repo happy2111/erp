@@ -11,6 +11,7 @@ import {
   InstallmentStatus,
   PaymentType,
   Prisma,
+  RelatedType,
   SaleStatus,
 } from '.prisma/client-tenant';
 import { KassasService } from '../kassas/kassas.service';
@@ -22,6 +23,7 @@ import { SaleFilterDto } from '../product-transaction/dto/sale-filter.dto';
 import { UpdateSaleDto } from '../product-transaction/dto/update-sale.dto';
 import { InstallmentsService } from '../installments/installments.service';
 import { InstallmentWithCustomer } from '../installments/types/installment';
+import { TransactionsService } from '../transactions/transactions.service';
 
 @Injectable()
 export class SalesService {
@@ -31,6 +33,7 @@ export class SalesService {
     private readonly kassasService: KassasService,
     private readonly stocksService: StocksService,
     private readonly installmentsService: InstallmentsService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async create(tenant: Tenant, dto: CreateSaleDto) {
@@ -226,6 +229,7 @@ export class SalesService {
         }
       }
 
+
       // Возвращаем продажу + созданную рассрочку (если была)
       return {
         ...sale,
@@ -398,26 +402,40 @@ export class SalesService {
         },
       });
 
-      // Зачисляем в кассу (если указана)
-      if (kassaId) {
+      if (kassaId && sale.totalAmount.greaterThan(0)) {
+        // Создаём платёж
+        await tx.payment.create({
+          data: {
+            organizationId: tenant.id,
+            kassaId,
+            amount: sale.totalAmount,
+            currencyId: sale.currencyId,
+            type: PaymentType.INCOME,
+            description: `Полная оплата продажи ${sale.invoiceNumber}`,
+            saleId,
+            customerId: sale.customerId,
+          },
+        });
+
+        // Зачисляем в кассу
         await this.kassasService.updateBalance(
           tx,
           kassaId,
           Number(sale.totalAmount),
         );
-        await tx.sale.update({
-          where: { id: saleId },
-          data: {
-            kassaId,
-            status: SaleStatus.PAID,
-            paidAmount: sale.totalAmount,
-          },
-        });
-      } else {
-        await tx.sale.update({
-          where: { id: saleId },
-          data: { status: SaleStatus.PAID },
-        });
+
+        // Создаём транзакцию
+        if (sale.customerId) {
+          await this.transactionsService.createFromPayment(tx, tenant.id, {
+            customerId: sale.customerId,
+            relatedType: RelatedType.SALE,
+            relatedId: sale.id,
+            amount: Number(sale.totalAmount),
+            type: PaymentType.INCOME,
+            currencyId: sale.currencyId,
+            description: `Оплата продажи ${sale.invoiceNumber}`,
+          });
+        }
       }
 
       return { message: 'Продажа успешно подтверждена' };

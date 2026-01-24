@@ -5,14 +5,13 @@ import {
   Post,
   Req,
   Res,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { TenantAuthService } from './tenant-auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Request, Response } from 'express';
 import { TenantLoginDto } from './dto/login.dto';
-import type { JwtUser } from './interfaces/jwt.interface';
+import type { JwtAuthenticatedUser, JwtUser } from './interfaces/jwt.interface';
 import { JwtAuthGuard } from './guards/jwt.guard';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
@@ -68,7 +67,7 @@ export class TenantAuthController {
     @Body() body: { orgUserId: string },
     @Res({ passthrough: true }) res: Response,
     @CurrentTenant() tenant: Tenant,
-    @CurrentTenantUser() user: JwtUser,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
   ) {
     return this.authService.switchOrganization(
       res,

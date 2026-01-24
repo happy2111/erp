@@ -138,6 +138,7 @@ export class TenantAuthService {
       userId: payload.sub,
       tenantId: payload.tenantId,
     };
+
     if (payload.purpose === 'ORG_SELECTION') {
       return {
         ...userBase,
@@ -145,18 +146,17 @@ export class TenantAuthService {
       };
     }
 
-    if (!payload.orgId)
-      throw new UnauthorizedException('Invalid token payload');
+    if (!payload.orgId || !payload.orgUserId || !payload.role) {
+      throw new UnauthorizedException('Invalid token payload structure');
+    }
 
     const client = await this.prismaTenant.getTenantClientById(
       payload.tenantId,
     );
 
     const orgUser = await client.organizationUser.findUnique({
-      where: { id: payload.orgUserId },
-      include: {
-        user: true,
-      },
+      where: { id: payload.orgUserId }, // Здесь TS может еще ругаться, см. ниже
+      include: { user: true },
     });
 
     if (!orgUser || !orgUser.user.isActive) {
@@ -168,7 +168,7 @@ export class TenantAuthService {
       orgId: payload.orgId,
       orgUserId: payload.orgUserId,
       role: payload.role,
-    };
+    } as JwtUser;
   }
 
   private authWithOrgUser(

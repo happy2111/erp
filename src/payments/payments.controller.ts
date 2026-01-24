@@ -25,6 +25,8 @@ import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import type { Tenant } from '@prisma/client';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentFilterDto } from './dto/payment-filter.dto';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @ApiTags('Payments')
 @ApiSecurity('x-tenant-key')
@@ -42,8 +44,12 @@ export class PaymentsController {
     OrgUserRole.OWNER,
   )
   @ApiOperation({ summary: 'Создать платёж (приход, расход, перевод)' })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreatePaymentDto) {
-    return this.paymentsService.create(tenant, dto);
+  create(
+    @CurrentTenant() tenant: Tenant,
+    @Body() dto: CreatePaymentDto,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+  ) {
+    return this.paymentsService.create(tenant, dto, user);
   }
 
   @Get()

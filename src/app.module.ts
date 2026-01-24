@@ -37,6 +37,7 @@ import { PurchasesModule } from './purchases/purchases.module';
 import { InstallmentsModule } from './installments/installments.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     PurchasesModule,
     InstallmentsModule,
     TasksModule,
+    TransactionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

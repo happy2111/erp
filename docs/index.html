@@ -568,7 +568,7 @@
                   <div class="mt-1 ml-2">
                     <div class="mb-1 font-medium text-gray-600"><a href="#model-Transaction-fields">Fields</a></div>
                       <ul class="pl-3 ml-1 border-l-2 border-gray-400">
-                      <li><a href="#model-Transaction-id">id</a></li><li><a href="#model-Transaction-organizationId">organizationId</a></li><li><a href="#model-Transaction-customerId">customerId</a></li><li><a href="#model-Transaction-relatedType">relatedType</a></li><li><a href="#model-Transaction-relatedId">relatedId</a></li><li><a href="#model-Transaction-date">date</a></li><li><a href="#model-Transaction-debit">debit</a></li><li><a href="#model-Transaction-credit">credit</a></li><li><a href="#model-Transaction-balanceAfter">balanceAfter</a></li><li><a href="#model-Transaction-currencyId">currencyId</a></li><li><a href="#model-Transaction-description">description</a></li><li><a href="#model-Transaction-organization">organization</a></li><li><a href="#model-Transaction-customer">customer</a></li><li><a href="#model-Transaction-currency">currency</a></li>
+                      <li><a href="#model-Transaction-id">id</a></li><li><a href="#model-Transaction-organizationId">organizationId</a></li><li><a href="#model-Transaction-customerId">customerId</a></li><li><a href="#model-Transaction-relatedType">relatedType</a></li><li><a href="#model-Transaction-relatedId">relatedId</a></li><li><a href="#model-Transaction-date">date</a></li><li><a href="#model-Transaction-debit">debit</a></li><li><a href="#model-Transaction-credit">credit</a></li><li><a href="#model-Transaction-balanceAfter">balanceAfter</a></li><li><a href="#model-Transaction-currencyId">currencyId</a></li><li><a href="#model-Transaction-description">description</a></li><li><a href="#model-Transaction-createdById">createdById</a></li><li><a href="#model-Transaction-organization">organization</a></li><li><a href="#model-Transaction-customer">customer</a></li><li><a href="#model-Transaction-currency">currency</a></li>
                       </ul>
                   </div>
                   <div class="mt-2 ml-2">
@@ -8299,7 +8299,7 @@
         <strong>Yes</strong>
       </td>
       <td class="px-4 py-2 border">
-        Дата д��бавления связи, пример: "2025-11-02T12:00:00Z"
+        Дата добавления связи, пример: "2025-11-02T12:00:00Z"
       </td>
     </tr>
     
@@ -24033,6 +24033,26 @@
       </td>
       <td class="px-4 py-2 border">
         Необязательное описание транзакции, пример: "Оплата по счёту №1234"
+      </td>
+    </tr>
+    
+    <tr id="model-Transaction-createdById">
+      <td class="px-4 py-2 border">
+       createdById 
+      </td>
+      <td class="px-4 py-2 border">
+       String?
+      </td>
+      <td class="px-4 py-2 border">
+        <ul>
+          <li> - </li>
+        </ul>
+      </td>
+      <td class="px-4 py-2 border">
+        No
+      </td>
+      <td class="px-4 py-2 border">
+        ID пользователя, создавшего запись
       </td>
     </tr>
     
@@ -54461,6 +54481,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-StringNullableFilter">StringNullableFilter</a> | String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationScalarRelationFilter">OrganizationScalarRelationFilter</a> | <a href="#type-inputType-OrganizationWhereInput">OrganizationWhereInput</a>
@@ -54634,6 +54666,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-SortOrder">SortOrder</a> | <a href="#type-inputType-SortOrderInput">SortOrderInput</a>
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-SortOrder">SortOrder</a> | <a href="#type-inputType-SortOrderInput">SortOrderInput</a>
       </td>
@@ -54865,6 +54909,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-StringNullableFilter">StringNullableFilter</a> | String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationScalarRelationFilter">OrganizationScalarRelationFilter</a> | <a href="#type-inputType-OrganizationWhereInput">OrganizationWhereInput</a>
@@ -55038,6 +55094,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-SortOrder">SortOrder</a> | <a href="#type-inputType-SortOrderInput">SortOrderInput</a>
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-SortOrder">SortOrder</a> | <a href="#type-inputType-SortOrderInput">SortOrderInput</a>
       </td>
@@ -55282,6 +55350,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-StringNullableWithAggregatesFilter">StringNullableWithAggregatesFilter</a> | String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-StringNullableWithAggregatesFilter">StringNullableWithAggregatesFilter</a> | String | Null
       </td>
@@ -85641,6 +85721,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationCreateNestedOneWithoutTransactionsInput">OrganizationCreateNestedOneWithoutTransactionsInput</a>
@@ -85823,6 +85915,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -85926,6 +86030,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
       </td>
@@ -86119,6 +86235,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -86267,6 +86395,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -86370,6 +86510,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
       </td>
@@ -86518,6 +86670,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
       </td>
@@ -111107,6 +111271,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-SortOrder">SortOrder</a>
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -111307,6 +111483,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-SortOrder">SortOrder</a>
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -111446,6 +111634,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-SortOrder">SortOrder</a>
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-SortOrder">SortOrder</a>
       </td>
@@ -165017,6 +165217,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationCreateNestedOneWithoutTransactionsInput">OrganizationCreateNestedOneWithoutTransactionsInput</a>
@@ -165166,6 +165378,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | Null
       </td>
@@ -169286,6 +169510,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        <a href="#type-inputType-StringNullableFilter">StringNullableFilter</a> | String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-StringNullableFilter">StringNullableFilter</a> | String | Null
       </td>
@@ -174021,6 +174257,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         customer </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationCustomerCreateNestedOneWithoutTransactionsInput">OrganizationCustomerCreateNestedOneWithoutTransactionsInput</a>
@@ -174170,6 +174418,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | Null
       </td>
@@ -192933,6 +193193,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationCreateNestedOneWithoutTransactionsInput">OrganizationCreateNestedOneWithoutTransactionsInput</a>
@@ -193082,6 +193354,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | Null
       </td>
@@ -273051,6 +273335,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -275365,6 +275661,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationUpdateOneRequiredWithoutTransactionsNestedInput">OrganizationUpdateOneRequiredWithoutTransactionsNestedInput</a>
@@ -275523,6 +275831,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -275650,6 +275970,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
       </td>
@@ -279819,6 +280151,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -283485,6 +283829,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         customer </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationCustomerUpdateOneRequiredWithoutTransactionsNestedInput">OrganizationCustomerUpdateOneRequiredWithoutTransactionsNestedInput</a>
@@ -283643,6 +283999,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -283770,6 +284138,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
       </td>
@@ -292051,6 +292431,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -293585,6 +293977,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-inputType-OrganizationUpdateOneRequiredWithoutTransactionsNestedInput">OrganizationUpdateOneRequiredWithoutTransactionsNestedInput</a>
@@ -293743,6 +294147,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -293870,6 +294286,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String | <a href="#type-inputType-NullableStringFieldUpdateOperationsInput">NullableStringFieldUpdateOperationsInput</a> | Null
       </td>
@@ -312567,6 +312995,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-outputType-Organization">Organization</a>
@@ -320759,6 +321199,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         organization </td>
       <td class="px-4 py-2 border">
         <a href="#type-outputType-Organization">Organization</a>
@@ -320932,6 +321384,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String
       </td>
@@ -329800,6 +330264,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String
       </td>
@@ -342199,6 +342675,18 @@
     
     <tr>
       <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        Int
+      </td>
+
+      <td class="px-4 py-2 border">
+        <strong>Yes</strong>
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
         _all </td>
       <td class="px-4 py-2 border">
         Int
@@ -342461,6 +342949,18 @@
       </td>
     </tr>
     
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
+      <td class="px-4 py-2 border">
+        String
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
           </tbody>
         </table>
       </div>
@@ -342600,6 +343100,18 @@
     <tr>
       <td class="px-4 py-2 border">
         description </td>
+      <td class="px-4 py-2 border">
+        String
+      </td>
+
+      <td class="px-4 py-2 border">
+        No
+      </td>
+    </tr>
+    
+    <tr>
+      <td class="px-4 py-2 border">
+        createdById </td>
       <td class="px-4 py-2 border">
         String
       </td>
