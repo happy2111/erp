@@ -39,6 +39,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TransactionsModule } from './transactions/transactions.module';
 import { ProductTransactionsModule } from './product-transactions/product-transactions.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     TransactionsModule,
     ProductTransactionsModule,
     AuditLogsModule,
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

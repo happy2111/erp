@@ -14,8 +14,8 @@ export class AuditHelper {
       action: string;
       entity: string;
       entityId?: string;
-      oldValue?: any;
-      newValue?: any;
+      oldValue?: Record<string, unknown> | null;
+      newValue?: Record<string, unknown> | null;
       note?: string;
     },
   ) {

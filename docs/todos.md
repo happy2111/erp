@@ -55,14 +55,14 @@
 ## Дополнительно / позже
 
 - [X] замена tenant.id на organization.id
-- [ ] DocumentsModule (прикреплённые файлы, счета, акты)
+- [x] DocumentsModule (прикреплённые файлы, счета, акты)
 - [ ] Notifications (если будут push/email/sms)
 - [ ] Reports / Analytics (отчёты по продажам, остаткам, долгам)
 - [ ] Swagger + API документация
 - [ ] Unit + E2E тесты
 - [ ] Rate limiting, security headers, CORSnk
 - [X] Автоматическая проверка просрочки Можно добавить cron-задачу (например, через @nestjs/schedule), которая каждый день проверяет dueDate и меняет статус на OVERDUE.
-- [ ] Отмена рассрочки Можно добавить метод cancelInstallment, который вернёт статус CANCELLED и скорректирует баланс клиента.
+- [X] Отмена рассрочки Можно добавить метод cancelInstallment, который вернёт статус CANCELLED и скорректирует баланс клиента.
 - [ ] Добавить модуль возвратов (ReturnsModule)?
 - [ ] Полная проверка правы на контролерах (Roles)
 - [ ] csrf middleware
