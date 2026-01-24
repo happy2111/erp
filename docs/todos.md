@@ -54,6 +54,7 @@
 
 ## Дополнительно / позже
 
+- [ ] замена tenant.id на organization.id
 - [ ] DocumentsModule (прикреплённые файлы, счета, акты)
 - [ ] Notifications (если будут push/email/sms)
 - [ ] Reports / Analytics (отчёты по продажам, остаткам, долгам)
