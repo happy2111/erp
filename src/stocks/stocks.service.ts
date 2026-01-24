@@ -6,22 +6,33 @@ import {
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import { Tenant } from '@prisma/client';
 import { Prisma } from '.prisma/client-tenant';
+import { AuditHelper } from '../audit-logs/audit.helper';
 import { StockFilterDto } from './dto/stock-filter.dto';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class StocksService {
-  constructor(private readonly prismaTenant: PrismaTenantService) {}
+  constructor(
+    private readonly prismaTenant: PrismaTenantService,
+    private readonly auditHelper: AuditHelper,
+  ) {}
 
   // ============================================================
   // ПОЛУЧЕНИЕ ОСТАТКОВ (с пагинацией и поиском)
   // ============================================================
-  async findAll(tenant: Tenant, filter: StockFilterDto) {
+  async findAll(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    filter: StockFilterDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
+
     const { page = 1, limit = 20, search } = filter;
 
     const where: Prisma.StockWhereInput = {
-      organizationId: tenant.id,
+      organizationId,
     };
 
     if (search) {
@@ -29,6 +40,7 @@ export class StocksService {
         OR: [
           { title: { contains: search, mode: 'insensitive' } },
           { sku: { contains: search, mode: 'insensitive' } },
+          { barcode: { contains: search, mode: 'insensitive' } },
           { product: { name: { contains: search, mode: 'insensitive' } } },
         ],
       };
@@ -67,12 +79,17 @@ export class StocksService {
   // ============================================================
   // ПОЛУЧЕНИЕ ОСТАТКА ПО КОНКРЕТНОМУ ВАРИАНТУ ТОВАРА
   // ============================================================
-  async findOne(tenant: Tenant, productVariantId: string) {
+  async findOne(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    productVariantId: string,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     const stock = await client.stock.findFirst({
       where: {
-        organizationId: tenant.id,
+        organizationId,
         productVariantId,
       },
       include: {
@@ -90,12 +107,16 @@ export class StocksService {
 
     if (!stock) {
       // Если остатка ещё нет — возвращаем 0
-      const variant = await client.productVariant.findUnique({
-        where: { id: productVariantId },
-        select: { title: true, sku: true },
+      const variant = await client.productVariant.findFirst({
+        where: { id: productVariantId, product: { organizationId } },
+        select: { id: true, title: true, sku: true, barcode: true },
       });
 
-      if (!variant) throw new NotFoundException('Вариант товара не найден');
+      if (!variant) {
+        throw new NotFoundException(
+          'Вариант товара не найден или принадлежит другой организации',
+        );
+      }
 
       return {
         quantity: 0,
@@ -109,75 +130,96 @@ export class StocksService {
   // ============================================================
   // ИЗМЕНЕНИЕ ОСТАТКА (приход / расход / корректировка)
   // ============================================================
-  async adjustStock(tenant: Tenant, dto: AdjustStockDto) {
+  async adjustStock(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: AdjustStockDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
-    // Проверяем существование варианта товара
-    const variant = await client.productVariant.findUnique({
-      where: { id: dto.productVariantId },
-      include: { product: { select: { organizationId: true } } },
+    // 1. Проверяем существование варианта товара и принадлежность организации
+    const variant = await client.productVariant.findFirst({
+      where: {
+        id: dto.productVariantId,
+        product: { organizationId },
+      },
+      select: { id: true, title: true, sku: true },
     });
 
-    if (!variant) throw new NotFoundException('Вариант товара не найден');
-
-    if (variant.product.organizationId !== tenant.id) {
-      throw new BadRequestException('Товар не принадлежит этой организации');
+    if (!variant) {
+      throw new NotFoundException(
+        'Вариант товара не найден или принадлежит другой организации',
+      );
     }
 
-    // Проверяем, чтобы при расходе не уйти в минус
-    if (dto.quantityDelta < 0) {
-      const current = await client.stock.findFirst({
+    return client.$transaction(async (tx) => {
+      // 2. Проверяем, чтобы при расходе не уйти в минус
+      let currentQty = 0;
+      if (dto.quantityDelta < 0) {
+        const currentStock = await tx.stock.findFirst({
+          where: {
+            organizationId,
+            productVariantId: dto.productVariantId,
+          },
+          select: { quantity: true },
+        });
+
+        currentQty = currentStock ? currentStock.quantity : 0;
+
+        if (currentQty + dto.quantityDelta < 0) {
+          throw new BadRequestException(
+            `Недостаточно товара на складе. Текущий остаток: ${currentQty}, требуется списать: ${Math.abs(dto.quantityDelta)}`,
+          );
+        }
+      }
+
+      // 3. Обновляем или создаём остаток
+      const updatedStock = await tx.stock.upsert({
         where: {
-          organizationId: tenant.id,
+          organizationId_productVariantId: {
+            organizationId,
+            productVariantId: dto.productVariantId,
+          },
+        },
+        create: {
+          organizationId,
           productVariantId: dto.productVariantId,
+          quantity: dto.quantityDelta,
+        },
+        update: {
+          quantity: { increment: dto.quantityDelta },
         },
       });
 
-      const currentQty = current ? current.quantity : 0;
-      if (currentQty + dto.quantityDelta < 0) {
-        throw new BadRequestException(
-          `Недостаточно товара на складе. Текущий остаток: ${currentQty}, требуется списать: ${Math.abs(dto.quantityDelta)}`,
-        );
-      }
-    }
+      // 4. Логируем изменение остатка
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: dto.quantityDelta >= 0 ? 'INCREMENT' : 'DECREMENT',
+        entity: 'Stock',
+        entityId: updatedStock.id,
+        oldValue: { quantity: currentQty },
+        newValue: { quantity: updatedStock.quantity },
+        note: `${dto.quantityDelta >= 0 ? 'Приход' : 'Расход'} ${Math.abs(dto.quantityDelta)} ед. товара "${variant.title}" (SKU: ${variant.sku})`,
+      });
 
-    // Обновляем или создаём остаток
-    const updatedStock = await client.stock.upsert({
-      where: {
-        organizationId_productVariantId: {
-          organizationId: tenant.id,
-          productVariantId: dto.productVariantId,
-        },
-      },
-      create: {
-        organizationId: tenant.id,
-        productVariantId: dto.productVariantId,
-        quantity: dto.quantityDelta,
-      },
-      update: {
-        quantity: { increment: dto.quantityDelta },
-      },
+      return {
+        ...updatedStock,
+        quantity: Number(updatedStock.quantity),
+      };
     });
-
-    // Можно добавить запись в историю (будущую таблицу stock_movements)
-    // await client.stockMovement.create({...})
-
-    return {
-      ...updatedStock,
-      quantity: Number(updatedStock.quantity), // int → number
-    };
   }
 
   // ============================================================
   // МЕТОДЫ ДЛЯ ВНУТРЕННЕГО ИСПОЛЬЗОВАНИЯ (в Sales, Purchases и т.д.)
   // ============================================================
   async decrementStock(
-    client: any,
+    tx: Prisma.TransactionClient,
     organizationId: string,
     productVariantId: string,
     quantity: number,
   ) {
-    return client.stock.update({
+    return tx.stock.update({
       where: {
         organizationId_productVariantId: {
           organizationId,
@@ -191,12 +233,12 @@ export class StocksService {
   }
 
   async incrementStock(
-    client: any,
+    tx: Prisma.TransactionClient,
     organizationId: string,
     productVariantId: string,
     quantity: number,
   ) {
-    return client.stock.upsert({
+    return tx.stock.upsert({
       where: {
         organizationId_productVariantId: {
           organizationId,
@@ -214,13 +256,12 @@ export class StocksService {
     });
   }
 
-  // Получить текущий остаток (для проверок)
   async getCurrentQuantity(
-    client: any,
+    tx: Prisma.TransactionClient,
     organizationId: string,
     productVariantId: string,
   ): Promise<number> {
-    const stock = await client.stock.findFirst({
+    const stock = await tx.stock.findFirst({
       where: { organizationId, productVariantId },
       select: { quantity: true },
     });

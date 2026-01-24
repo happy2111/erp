@@ -1,10 +1,8 @@
-// stocks/stocks.controller.ts
 import {
   Body,
   Controller,
   Get,
   Param,
-  Patch,
   Post,
   Query,
   UseGuards,
@@ -24,7 +22,9 @@ import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { StockFilterDto } from './dto/stock-filter.dto';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 
@@ -45,10 +45,14 @@ export class StocksController {
   @ApiQuery({
     name: 'search',
     required: false,
-    description: 'Поиск по названию товара / SKU',
+    description: 'Поиск по названию товара / SKU / баркоду',
   })
-  findAll(@CurrentTenant() tenant: Tenant, @Query() filter: StockFilterDto) {
-    return this.stocksService.findAll(tenant, filter);
+  findAll(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() filter: StockFilterDto,
+  ) {
+    return this.stocksService.findAll(tenant, user, filter);
   }
 
   @Get('variant/:productVariantId')
@@ -57,9 +61,10 @@ export class StocksController {
   @ApiParam({ name: 'productVariantId', description: 'ID варианта товара' })
   findOne(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('productVariantId') productVariantId: string,
   ) {
-    return this.stocksService.findOne(tenant, productVariantId);
+    return this.stocksService.findOne(tenant, user, productVariantId);
   }
 
   @Post('adjust')
@@ -73,7 +78,11 @@ export class StocksController {
   @ApiOperation({
     summary: 'Изменить остаток на складе (приход/расход/корректировка)',
   })
-  adjustStock(@CurrentTenant() tenant: Tenant, @Body() dto: AdjustStockDto) {
-    return this.stocksService.adjustStock(tenant, dto);
+  adjustStock(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: AdjustStockDto,
+  ) {
+    return this.stocksService.adjustStock(tenant, user, dto);
   }
 }

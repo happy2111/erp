@@ -14,7 +14,6 @@ import {
   ApiOperation,
   ApiParam,
   ApiQuery,
-  ApiResponse,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
@@ -26,7 +25,9 @@ import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @ApiTags('Kassas')
 @ApiSecurity('x-tenant-key')
@@ -44,8 +45,12 @@ export class KassasController {
     OrgUserRole.ACCOUNTANT,
   )
   @ApiOperation({ summary: 'Создать новую кассу' })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateKassaDto) {
-    return this.kassasService.create(tenant, dto);
+  create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateKassaDto,
+  ) {
+    return this.kassasService.create(tenant, user, dto);
   }
 
   @Get()
@@ -56,11 +61,12 @@ export class KassasController {
   @ApiQuery({ name: 'search', required: false, example: 'наличные' })
   findAll(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
   ) {
-    return this.kassasService.findAll(tenant, {
+    return this.kassasService.findAll(tenant, user, {
       page: page ? +page : 1,
       limit: limit ? +limit : 20,
       search,
@@ -71,8 +77,12 @@ export class KassasController {
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
   @ApiOperation({ summary: 'Получить кассу по ID' })
   @ApiParam({ name: 'id', description: 'ID кассы' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.kassasService.findOne(tenant, id);
+  findOne(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.kassasService.findOne(tenant, user, id);
   }
 
   @Patch('update/:id')
@@ -87,10 +97,11 @@ export class KassasController {
   @ApiParam({ name: 'id', description: 'ID кассы' })
   update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateKassaDto,
   ) {
-    return this.kassasService.update(tenant, id, dto);
+    return this.kassasService.update(tenant, user, id, dto);
   }
 
   @Delete('remove/:id')
@@ -98,8 +109,12 @@ export class KassasController {
   @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
   @ApiOperation({ summary: 'Удалить кассу' })
   @ApiParam({ name: 'id', description: 'ID кассы' })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.kassasService.remove(tenant, id);
+  remove(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.kassasService.remove(tenant, user, id);
   }
 
   @Get(':id/history')
@@ -121,6 +136,7 @@ export class KassasController {
   @ApiQuery({ name: 'toDate', required: false, example: '2025-12-31' })
   getHistory(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -128,7 +144,7 @@ export class KassasController {
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
   ) {
-    return this.kassasService.getKassaHistory(tenant, id, {
+    return this.kassasService.getKassaHistory(tenant, user, id, {
       page: page ? +page : 1,
       limit: limit ? +limit : 20,
       type,
