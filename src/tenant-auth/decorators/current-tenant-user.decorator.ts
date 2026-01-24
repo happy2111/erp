@@ -1,11 +1,24 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import {
+  createParamDecorator,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { JwtAuthenticatedUser, JwtUser } from '../interfaces/jwt.interface';
 
-export const CurrentUser = createParamDecorator(
-  (data: string | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest();
-    if (data) {
-      return request.user?.[data];
+export function CurrentTenantUser(): ParameterDecorator;
+export function CurrentTenantUser<K extends keyof JwtAuthenticatedUser>(
+  key: K,
+): ParameterDecorator;
+
+export function CurrentTenantUser(key?: any): ParameterDecorator {
+  return createParamDecorator((_, ctx: ExecutionContext) => {
+    const req = ctx.switchToHttp().getRequest<{ user: JwtUser }>();
+    const user = req.user;
+
+    if (!user || !('orgId' in user)) {
+      throw new UnauthorizedException('Organization context required');
     }
-    return request.user;
-  },
-);
+
+    return key ? user[key] : user;
+  })();
+}

@@ -1,30 +1,33 @@
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException, NotFoundException
+  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
-import {Tenant} from "@prisma/client";
-import {CreateOrgCustomerDto} from "./dto/create-org-customer.dto";
-import {ConvertCustomerToUserDto} from "./dto/convert-customer-to-user.dto";
-import  { Prisma } from '.prisma/client-tenant';
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import { Tenant } from '@prisma/client';
+import { CreateOrgCustomerDto } from './dto/create-org-customer.dto';
+import { ConvertCustomerToUserDto } from './dto/convert-customer-to-user.dto';
+import { Prisma } from '.prisma/client-tenant';
 import * as bcrypt from 'bcrypt';
-import {OrganizationCustomerFilterDto} from "./dto/filter-org-customer.dto";
-import {UpdateOrgCustomerDto} from "./dto/update-org-customer.dto";
+import { OrganizationCustomerFilterDto } from './dto/filter-org-customer.dto';
+import { UpdateOrgCustomerDto } from './dto/update-org-customer.dto';
 
 @Injectable()
 export class OrganizationCustomerService {
-  constructor(
-    private readonly prismaTenant: PrismaTenantService
-  ) {}
+  constructor(private readonly prismaTenant: PrismaTenantService) {}
 
   async create(tenant: Tenant, dto: CreateOrgCustomerDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     // 0) Ensure organization exists in THIS tenant DB
-    const org = await client.organization.findUnique({ where: { id: dto.organizationId } });
+    const org = await client.organization.findUnique({
+      where: { id: dto.organizationId },
+    });
     if (!org) {
-      throw new BadRequestException(`Organization not found by id ${dto.organizationId}`);
+      throw new BadRequestException(
+        `Organization not found by id ${dto.organizationId}`,
+      );
     }
 
     // 1) Optional userId: ensure user exists (still optional)
@@ -38,7 +41,9 @@ export class OrganizationCustomerService {
         where: { userId: dto.userId },
       });
       if (orgCustomer) {
-        throw new BadRequestException('Customer with this userId already exists');
+        throw new BadRequestException(
+          'Customer with this userId already exists',
+        );
       }
     }
 
@@ -47,7 +52,9 @@ export class OrganizationCustomerService {
       where: { phone: dto.phone },
     });
     if (existingByPhone) {
-      throw new BadRequestException(`Customer with phone ${dto.phone} already exists`);
+      throw new BadRequestException(
+        `Customer with phone ${dto.phone} already exists`,
+      );
     }
 
     // 3) Create with robust error handling
@@ -71,11 +78,16 @@ export class OrganizationCustomerService {
         const reason = dto.userId
           ? 'organizationId or userId does not exist in this tenant database'
           : 'organizationId does not exist in this tenant database';
-        throw new BadRequestException(`Foreign key constraint failed: ${reason}.`);
+        throw new BadRequestException(
+          `Foreign key constraint failed: ${reason}.`,
+        );
       }
       if (e?.code === 'P2002') {
         // If you later add unique constraints (e.g., phone), handle here
-        const target = (e.meta && (e.meta as any).target) ? (e.meta as any).target.join(', ') : 'unknown';
+        const target =
+          e.meta && (e.meta as any).target
+            ? (e.meta as any).target.join(', ')
+            : 'unknown';
         throw new BadRequestException(`Unique constraint failed on: ${target}`);
       }
       // Don’t hide the real error type
@@ -96,19 +108,28 @@ export class OrganizationCustomerService {
         });
 
         if (!orgCustomer) {
-          throw new BadRequestException('Customer not found or already converted to user');
+          throw new BadRequestException(
+            'Customer not found or already converted to user',
+          );
         }
 
         // 2) Доп. проверка существующих пользователей по email/phone внутри транзакции
         const orConditions: Prisma.UserWhereInput[] = [];
         if (dto.user.email) orConditions.push({ email: dto.user.email });
-        if (orgCustomer.phone) orConditions.push({ phone_numbers: { some: { phone: orgCustomer.phone } } });
+        if (orgCustomer.phone)
+          orConditions.push({
+            phone_numbers: { some: { phone: orgCustomer.phone } },
+          });
         for (const p of phonesToAdd) {
-          if (p.phone) orConditions.push({ phone_numbers: { some: { phone: p.phone } } });
+          if (p.phone)
+            orConditions.push({ phone_numbers: { some: { phone: p.phone } } });
         }
 
         if (orConditions.length > 0) {
-          const existing = await tx.user.findFirst({ where: { OR: orConditions }, include: { phone_numbers: true } });
+          const existing = await tx.user.findFirst({
+            where: { OR: orConditions },
+            include: { phone_numbers: true },
+          });
 
           if (existing) {
             const conflicts: string[] = [];
@@ -118,21 +139,26 @@ export class OrganizationCustomerService {
             }
 
             // Проверяем основной телефон клиента
-            if (orgCustomer.phone && existing.phone_numbers.some(p => p.phone === orgCustomer.phone)) {
+            if (
+              orgCustomer.phone &&
+              existing.phone_numbers.some((p) => p.phone === orgCustomer.phone)
+            ) {
               conflicts.push(`phone: ${orgCustomer.phone}`);
             }
 
             // Проверяем телефоны из dto
             if (dto.phonesToAdd && dto.phonesToAdd.length > 0) {
               for (const p of dto.phonesToAdd) {
-                if (existing.phone_numbers.some(ep => ep.phone === p.phone)) {
+                if (existing.phone_numbers.some((ep) => ep.phone === p.phone)) {
                   conflicts.push(`phone: ${p.phone}`);
                 }
               }
             }
 
             console.log('Conflict fields:', conflicts);
-            throw new BadRequestException(`User already exists with ${conflicts.join(', ')}`);
+            throw new BadRequestException(
+              `User already exists with ${conflicts.join(', ')}`,
+            );
           }
         }
 
@@ -204,8 +230,13 @@ export class OrganizationCustomerService {
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         if (e.code === 'P2002') {
-          const target = (e.meta && (e.meta as any).target) ? (e.meta as any).target.join(', ') : 'unknown';
-          throw new BadRequestException(`Unique constraint failed on the fields: ${target}`);
+          const target =
+            e.meta && (e.meta as any).target
+              ? (e.meta as any).target.join(', ')
+              : 'unknown';
+          throw new BadRequestException(
+            `Unique constraint failed on the fields: ${target}`,
+          );
         }
       }
 
@@ -281,7 +312,9 @@ export class OrganizationCustomerService {
     });
 
     if (!customer) {
-      throw new NotFoundException(`OrganizationCustomer with ID ${customerId} not found`);
+      throw new NotFoundException(
+        `OrganizationCustomer with ID ${customerId} not found`,
+      );
     }
 
     // Если клиент связан с пользователем, можно либо запретить удаление, либо удалить связь
@@ -305,7 +338,9 @@ export class OrganizationCustomerService {
     });
 
     if (!orgCustomer) {
-      throw new BadRequestException(`OrganizationCustomer with ID ${customerId} not found`);
+      throw new BadRequestException(
+        `OrganizationCustomer with ID ${customerId} not found`,
+      );
     }
 
     return client.$transaction(async (tx) => {
@@ -346,9 +381,12 @@ export class OrganizationCustomerService {
 
         // Синхронизируем имя/фамилию/отчество
         const profileUpdateData: Prisma.UserProfileUpdateInput = {};
-        if (dto.firstName && dto.firstName !== orgCustomer.firstName) profileUpdateData.firstName = dto.firstName;
-        if (dto.lastName && dto.lastName !== orgCustomer.lastName) profileUpdateData.lastName = dto.lastName;
-        if (dto.patronymic && dto.patronymic !== orgCustomer.patronymic) profileUpdateData.patronymic = dto.patronymic;
+        if (dto.firstName && dto.firstName !== orgCustomer.firstName)
+          profileUpdateData.firstName = dto.firstName;
+        if (dto.lastName && dto.lastName !== orgCustomer.lastName)
+          profileUpdateData.lastName = dto.lastName;
+        if (dto.patronymic && dto.patronymic !== orgCustomer.patronymic)
+          profileUpdateData.patronymic = dto.patronymic;
 
         if (Object.keys(profileUpdateData).length > 0) {
           await tx.userProfile.update({
@@ -361,5 +399,4 @@ export class OrganizationCustomerService {
       return updatedCustomer;
     });
   }
-
 }

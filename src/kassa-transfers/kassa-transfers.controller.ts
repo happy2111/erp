@@ -1,8 +1,16 @@
-// kassa-transfers/kassa-transfers.controller.ts
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiSecurity,
   ApiTags,
@@ -15,7 +23,9 @@ import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @ApiTags('Kassa Transfers')
 @ApiSecurity('x-tenant-key')
@@ -33,8 +43,12 @@ export class KassaTransfersController {
     OrgUserRole.ACCOUNTANT,
   )
   @ApiOperation({ summary: 'Создать перевод между кассами' })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateKassaTransferDto) {
-    return this.transfersService.create(tenant, dto);
+  create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateKassaTransferDto,
+  ) {
+    return this.transfersService.create(tenant, user, dto);
   }
 
   @Get()
@@ -44,12 +58,25 @@ export class KassaTransfersController {
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   findAll(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.transfersService.findAll(tenant, {
+    return this.transfersService.findAll(tenant, user, {
       page: page ? +page : 1,
       limit: limit ? +limit : 20,
     });
+  }
+
+  @Get(':id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  @ApiOperation({ summary: 'Получить детальную информацию по одному переводу' })
+  @ApiParam({ name: 'id', description: 'ID перевода' })
+  findOne(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.transfersService.findOne(tenant, user, id);
   }
 }

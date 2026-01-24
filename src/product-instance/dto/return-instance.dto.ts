@@ -1,38 +1,27 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class ReturnInstanceDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-product-instance' })
   @IsUUID()
   instanceId: string;
 
-  // ---
-
-  @ApiProperty({ required: false, nullable: true })
+  @ApiPropertyOptional({ example: 'uuid-customer' })
   @IsOptional()
-  @IsString()
   @IsUUID()
-  @Type(() => String)
-  fromCustomerId?: string | null;
+  fromCustomerId?: string;
 
-  // ---
-
-  @ApiProperty({ required: false, nullable: true })
+  @ApiPropertyOptional({
+    example: 'uuid-target-organization',
+    description:
+      'ID организации, куда возвращается товар (если отличается от текущей)',
+  })
   @IsOptional()
-  @IsString()
   @IsUUID()
-  @Type(() => String)
-  toOrganizationId?: string | null;
+  toOrganizationId?: string;
 
-  // ---
-
-  @ApiProperty({ required: false, nullable: true })
+  @ApiPropertyOptional({ example: 'Возврат по гарантии' })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
-  @Type(() => String)
-  description?: string | null;
+  description?: string;
 }

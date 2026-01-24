@@ -1,3 +1,4 @@
+// payments/payments.controller.ts
 import {
   Body,
   Controller,
@@ -22,7 +23,9 @@ import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentFilterDto } from './dto/payment-filter.dto';
 
@@ -42,8 +45,12 @@ export class PaymentsController {
     OrgUserRole.OWNER,
   )
   @ApiOperation({ summary: 'Создать платёж (приход, расход, перевод)' })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreatePaymentDto) {
-    return this.paymentsService.create(tenant, dto);
+  create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreatePaymentDto,
+  ) {
+    return this.paymentsService.create(tenant, user, dto);
   }
 
   @Get()
@@ -60,15 +67,23 @@ export class PaymentsController {
   @ApiQuery({ name: 'toDate', required: false, example: '2025-12-31' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  findAll(@CurrentTenant() tenant: Tenant, @Query() filter: PaymentFilterDto) {
-    return this.paymentsService.findAll(tenant, filter);
+  findAll(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() filter: PaymentFilterDto,
+  ) {
+    return this.paymentsService.findAll(tenant, user, filter);
   }
 
   @Get(':id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard)
   @ApiOperation({ summary: 'Получить платёж по ID' })
   @ApiParam({ name: 'id' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.paymentsService.findOne(tenant, id);
+  findOne(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.paymentsService.findOne(tenant, user, id);
   }
 }

@@ -2,7 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
-  UnauthorizedException
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -14,14 +14,14 @@ export class ApiKeyGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     const apiKey =
       (req.headers['x-tenant-key'] as string) ||
-      (req.headers['api-key'] as string)
+      (req.headers['api-key'] as string);
 
     if (!apiKey) {
       throw new UnauthorizedException('Tenant API key missing');
     }
 
     const tenant = await this.prisma.tenant.findUnique({
-      where: { apiKey }
+      where: { apiKey },
     });
 
     if (!tenant) {

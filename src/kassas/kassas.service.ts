@@ -1,53 +1,87 @@
 import {
   Injectable,
   NotFoundException,
-  ConflictException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import { Tenant } from '@prisma/client';
 import { CreateKassaDto, UpdateKassaDto } from './dto/create-kassa.dto';
-import { PaymentType, Prisma } from '.prisma/client-tenant';
+import { Prisma, PaymentType } from '.prisma/client-tenant';
+import { AuditHelper } from '../audit-logs/audit.helper';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
+import { KassaTransferWithRelations } from '../kassa-transfers/types/kassa-transfer.type';
 
 @Injectable()
 export class KassasService {
-  constructor(private readonly prismaTenant: PrismaTenantService) {}
+  constructor(
+    private readonly prismaTenant: PrismaTenantService,
+    private readonly auditHelper: AuditHelper,
+  ) {}
 
-  async create(tenant: Tenant, dto: CreateKassaDto) {
+  async create(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: CreateKassaDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
-    // Проверка существования валюты
+    // 1. Проверка валюты
     const currency = await client.currency.findUnique({
       where: { id: dto.currencyId },
     });
-
     if (!currency) {
       throw new BadRequestException('Указанная валюта не найдена');
     }
 
-    return client.kassa.create({
-      data: {
-        ...dto,
-        organizationId: tenant.id, // важно!
-        balance: new Prisma.Decimal(0),
-      },
-      include: {
-        currency: {
-          select: { code: true, name: true, symbol: true },
+    return client.$transaction(async (tx) => {
+      // 2. Создаём кассу
+      const kassa = await tx.kassa.create({
+        data: {
+          ...dto,
+          organizationId,
+          balance: new Prisma.Decimal(0),
         },
-      },
+        include: {
+          currency: {
+            select: { code: true, name: true, symbol: true },
+          },
+        },
+      });
+
+      // 3. Логируем создание кассы
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'CREATE',
+        entity: 'Kassa',
+        entityId: kassa.id,
+        newValue: {
+          name: kassa.name,
+          type: kassa.type,
+          currency: kassa.currency.code,
+        },
+        note: `Создана новая касса "${kassa.name}"`,
+      });
+
+      return {
+        ...kassa,
+        balance: Number(kassa.balance),
+      };
     });
   }
 
   async findAll(
     tenant: Tenant,
+    user: JwtAuthenticatedUser,
     filter?: { page?: number; limit?: number; search?: string },
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
     const { page = 1, limit = 20, search } = filter || {};
 
     const where: Prisma.KassaWhereInput = {
-      organizationId: tenant.id,
+      organizationId,
     };
 
     if (search) {
@@ -69,7 +103,6 @@ export class KassasService {
       client.kassa.count({ where }),
     ]);
 
-    // Преобразуем Decimal → number
     const transformed = data.map((k) => ({
       ...k,
       balance: Number(k.balance),
@@ -80,14 +113,16 @@ export class KassasService {
       total,
       page,
       limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 
-  async findOne(tenant: Tenant, id: string) {
+  async findOne(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     const kassa = await client.kassa.findFirst({
-      where: { id, organizationId: tenant.id },
+      where: { id, organizationId },
       include: {
         currency: {
           select: { id: true, code: true, name: true, symbol: true },
@@ -95,7 +130,11 @@ export class KassasService {
       },
     });
 
-    if (!kassa) throw new NotFoundException('Касса не найдена');
+    if (!kassa) {
+      throw new NotFoundException(
+        'Касса не найдена или принадлежит другой организации',
+      );
+    }
 
     return {
       ...kassa,
@@ -103,54 +142,122 @@ export class KassasService {
     };
   }
 
-  async update(tenant: Tenant, id: string, dto: UpdateKassaDto) {
+  async update(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    id: string,
+    dto: UpdateKassaDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     const existing = await client.kassa.findFirst({
-      where: { id, organizationId: tenant.id },
+      where: { id, organizationId },
     });
 
-    if (!existing) throw new NotFoundException('Касса не найдена');
-
-    return client.kassa.update({
-      where: { id },
-      data: dto,
-      include: { currency: { select: { code: true, name: true } } },
-    });
-  }
-
-  async remove(tenant: Tenant, id: string) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-
-    const kassa = await client.kassa.findFirst({
-      where: { id, organizationId: tenant.id },
-    });
-
-    if (!kassa) throw new NotFoundException('Касса не найдена');
-
-    try {
-      return await client.kassa.delete({ where: { id } });
-    } catch (e) {
-      throw new ConflictException(
-        'Невозможно удалить кассу — есть связанные операции',
+    if (!existing) {
+      throw new NotFoundException(
+        'Касса не найдена или принадлежит другой организации',
       );
     }
+
+    return client.$transaction(async (tx) => {
+      const updated = await tx.kassa.update({
+        where: { id },
+        data: dto,
+        include: {
+          currency: { select: { code: true, name: true } },
+        },
+      });
+
+      // Логируем изменение
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'UPDATE',
+        entity: 'Kassa',
+        entityId: id,
+        oldValue: {
+          name: existing.name,
+          type: existing.type,
+          balance: Number(existing.balance),
+        },
+        newValue: {
+          name: updated.name,
+          type: updated.type,
+          balance: Number(updated.balance),
+        },
+        note: `Обновлена касса "${updated.name}"`,
+      });
+
+      return {
+        ...updated,
+        balance: Number(updated.balance),
+      };
+    });
   }
 
-  // Вспомогательный метод для других модулей (например, для переводов)
+  async remove(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
+
+    const kassa = await client.kassa.findFirst({
+      where: { id, organizationId },
+    });
+
+    if (!kassa) {
+      throw new NotFoundException(
+        'Касса не найдена или принадлежит другой организации',
+      );
+    }
+
+    return client.$transaction(async (tx) => {
+      // Логируем удаление
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'DELETE',
+        entity: 'Kassa',
+        entityId: id,
+        oldValue: {
+          name: kassa.name,
+          type: kassa.type,
+          balance: Number(kassa.balance),
+        },
+        note: `Удалена касса "${kassa.name}"`,
+      });
+
+      try {
+        return await tx.kassa.delete({ where: { id } });
+      } catch (e) {
+        console.error(e);
+        throw new ConflictException(
+          'Невозможно удалить кассу — есть связанные операции (платежи, переводы и т.д.)',
+        );
+      }
+    });
+  }
+
+  // Вспомогательный метод для других модулей (обновление баланса)
   async updateBalance(
-    client: any,
+    tx: Prisma.TransactionClient,
     kassaId: string,
     delta: number,
   ) {
-    return await client.kassa.update({
+    const updated = await tx.kassa.update({
       where: { id: kassaId },
       data: { balance: { increment: new Prisma.Decimal(delta) } },
+      select: { id: true, name: true, balance: true },
     });
+
+    return {
+      ...updated,
+      balance: Number(updated.balance),
+    };
   }
 
+  // История операций по кассе (платежи + переводы)
   async getKassaHistory(
     tenant: Tenant,
+    user: JwtAuthenticatedUser,
     kassaId: string,
     filter: {
       page?: number;
@@ -161,18 +268,23 @@ export class KassasService {
     } = {},
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
     const { page = 1, limit = 20, type, fromDate, toDate } = filter;
 
     // Проверяем существование кассы
     const kassa = await client.kassa.findFirst({
-      where: { id: kassaId, organizationId: tenant.id },
+      where: { id: kassaId, organizationId },
     });
-    if (!kassa) throw new NotFoundException('Касса не найдена');
+    if (!kassa) {
+      throw new NotFoundException(
+        'Касса не найдена или принадлежит другой организации',
+      );
+    }
 
-    // 1. Получаем платежи, связанные с этой кассой
+    // 1. Платежи по кассе
     const paymentWhere: Prisma.PaymentWhereInput = {
       kassaId,
-      organizationId: tenant.id,
+      organizationId,
     };
 
     if (type && type !== 'TRANSFER') paymentWhere.type = type;
@@ -195,9 +307,9 @@ export class KassasService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // 2. Получаем переводы, где касса — источник ИЛИ получатель
+    // 2. Переводы, где касса — источник ИЛИ получатель
     const transferWhere: Prisma.KassaTransferWhereInput = {
-      organizationId: tenant.id,
+      organizationId,
       OR: [{ fromKassaId: kassaId }, { toKassaId: kassaId }],
     };
 
@@ -207,11 +319,9 @@ export class KassasService {
       if (toDate) transferWhere.createdAt.lte = new Date(toDate);
     }
 
-    // Если фильтр по типу — включаем только TRANSFER
-    if (type && type !== 'TRANSFER') {
-      // Если фильтр только INCOME/EXPENSE — переводы не включаем
-    } else {
-      const transfers = await client.kassaTransfer.findMany({
+    let transfers: KassaTransferWithRelations[] = [];
+    if (!type || type === 'TRANSFER') {
+      transfers = await client.kassaTransfer.findMany({
         where: transferWhere,
         include: {
           from_kassa: {
@@ -233,87 +343,61 @@ export class KassasService {
         },
         orderBy: { createdAt: 'desc' },
       });
-
-      // 3. Объединяем платежи и переводы в один список
-      const allOperations = [
-        ...payments.map((p) => ({
-          type: 'PAYMENT',
-          subType: p.type,
-          id: p.id,
-          amount: Number(p.amount),
-          currency: p.currency,
-          description:
-            p.description ||
-            `${p.type === PaymentType.INCOME ? 'Поступление' : 'Расход'} на кассу`,
-          direction: p.type === PaymentType.INCOME ? 'IN' : 'OUT',
-          related: p.sale || p.purchase || null,
-          customer: p.customer,
-          createdAt: p.createdAt,
-          kassa: { id: p.kassaId, name: kassa.name },
-        })),
-
-        ...transfers.map((t) => {
-          const isOutgoing = t.fromKassaId === kassaId;
-          return {
-            type: 'TRANSFER',
-            id: t.id,
-            amount: Number(isOutgoing ? t.amount : t.convertedAmount),
-            currency: isOutgoing ? t.from_currency : t.to_currency,
-            description:
-              t.description ||
-              (isOutgoing
-                ? 'Перевод в другую кассу'
-                : 'Поступление из другой кассы'),
-            direction: isOutgoing ? 'OUT' : 'IN',
-            fromKassa: t.from_kassa,
-            toKassa: t.to_kassa,
-            rate: Number(t.rate),
-            originalAmount: Number(t.amount),
-            convertedAmount: Number(t.convertedAmount),
-            createdAt: t.createdAt,
-          };
-        }),
-      ];
-
-      // 4. Сортируем по дате (новые сверху)
-      allOperations.sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-      );
-
-      // 5. Пагинация
-      const total = allOperations.length;
-      const paginated = allOperations.slice((page - 1) * limit, page * limit);
-
-      return {
-        data: paginated,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      };
     }
 
-    // Если фильтр только по INCOME/EXPENSE — возвращаем только платежи
-    const transformedPayments = payments.map((p) => ({
-      type: 'PAYMENT',
-      subType: p.type,
-      id: p.id,
-      amount: Number(p.amount),
-      currency: p.currency,
-      description: p.description,
-      direction: p.type === PaymentType.INCOME ? 'IN' : 'OUT',
-      related: p.sale || p.purchase || null,
-      customer: p.customer,
-      createdAt: p.createdAt,
-      kassa: { id: p.kassaId, name: kassa.name },
-    }));
+    // 3. Объединяем платежи и переводы
+    const allOperations = [
+      ...payments.map((p) => ({
+        type: 'PAYMENT',
+        subType: p.type,
+        id: p.id,
+        amount: Number(p.amount),
+        currency: p.currency,
+        description:
+          p.description ||
+          `${p.type === PaymentType.INCOME ? 'Поступление' : 'Расход'} на кассу`,
+        direction: p.type === PaymentType.INCOME ? 'IN' : 'OUT',
+        related: p.sale || p.purchase || null,
+        customer: p.customer,
+        createdAt: p.createdAt,
+        kassa: { id: p.kassaId, name: kassa.name },
+      })),
+
+      ...transfers.map((t) => {
+        const isOutgoing = t.fromKassaId === kassaId;
+        return {
+          type: 'TRANSFER',
+          id: t.id,
+          amount: Number(isOutgoing ? t.amount : t.convertedAmount),
+          currency: isOutgoing ? t.from_currency : t.to_currency,
+          description:
+            t.description ||
+            (isOutgoing
+              ? 'Перевод в другую кассу'
+              : 'Поступление из другой кассы'),
+          direction: isOutgoing ? 'OUT' : 'IN',
+          fromKassa: t.from_kassa,
+          toKassa: t.to_kassa,
+          rate: Number(t.rate),
+          originalAmount: Number(t.amount),
+          convertedAmount: Number(t.convertedAmount),
+          createdAt: t.createdAt,
+        };
+      }),
+    ];
+
+    // 4. Сортировка и пагинация
+    allOperations.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const total = allOperations.length;
+    const paginated = allOperations.slice((page - 1) * limit, page * limit);
 
     return {
-      data: transformedPayments,
-      total: payments.length,
+      data: paginated,
+      total,
       page,
       limit,
-      totalPages: Math.ceil(payments.length / limit),
+      totalPages: Math.ceil(total / limit),
     };
   }
 }

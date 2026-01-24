@@ -1,4 +1,3 @@
-// kassa-transfers/kassa-transfers.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -9,16 +8,24 @@ import { Tenant } from '@prisma/client';
 import { CreateKassaTransferDto } from './dto/create-kassa-transfer.dto';
 import { Prisma } from '.prisma/client-tenant';
 import { KassasService } from '../kassas/kassas.service';
+import { AuditHelper } from '../audit-logs/audit.helper';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class KassaTransfersService {
   constructor(
     private readonly prismaTenant: PrismaTenantService,
     private readonly kassasService: KassasService,
+    private readonly auditHelper: AuditHelper,
   ) {}
 
-  async create(tenant: Tenant, dto: CreateKassaTransferDto) {
+  async create(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: CreateKassaTransferDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     if (dto.fromKassaId === dto.toKassaId) {
       throw new BadRequestException('Нельзя переводить на ту же самую кассу');
@@ -26,29 +33,37 @@ export class KassaTransfersService {
 
     const [fromKassa, toKassa] = await Promise.all([
       client.kassa.findFirst({
-        where: { id: dto.fromKassaId, organizationId: tenant.id },
+        where: { id: dto.fromKassaId, organizationId },
       }),
       client.kassa.findFirst({
-        where: { id: dto.toKassaId, organizationId: tenant.id },
+        where: { id: dto.toKassaId, organizationId },
       }),
     ]);
 
-    if (!fromKassa) throw new NotFoundException('Касса-источник не найдена');
-    if (!toKassa) throw new NotFoundException('Касса-получатель не найдена');
+    if (!fromKassa)
+      throw new NotFoundException(
+        'Касса-источник не найдена или принадлежит другой организации',
+      );
+    if (!toKassa)
+      throw new NotFoundException(
+        'Касса-получатель не найдена или принадлежит другой организации',
+      );
 
     const amountDecimal = new Prisma.Decimal(dto.amount);
-    const rateDecimal = new Prisma.Decimal(dto.rate);
+    const rateDecimal = new Prisma.Decimal(dto.rate || 1);
     const convertedAmount = amountDecimal.mul(rateDecimal);
 
     if (fromKassa.balance.lessThan(amountDecimal)) {
-      throw new BadRequestException('Недостаточно средств на кассе-источнике');
+      throw new BadRequestException(
+        `Недостаточно средств на кассе-источнике (${fromKassa.name}). Баланс: ${fromKassa.balance}, требуется: ${dto.amount}`,
+      );
     }
 
     return client.$transaction(async (tx) => {
-      // Создаём запись перевода
+      // 1. Создаём запись перевода
       const transfer = await tx.kassaTransfer.create({
         data: {
-          organizationId: tenant.id,
+          organizationId,
           fromKassaId: dto.fromKassaId,
           toKassaId: dto.toKassaId,
           fromCurrencyId: fromKassa.currencyId,
@@ -65,18 +80,37 @@ export class KassaTransfersService {
           to_kassa: {
             select: { name: true, currency: { select: { code: true } } },
           },
+          from_currency: { select: { code: true } },
+          to_currency: { select: { code: true } },
         },
       });
 
-      // Снимаем с источника
-      await this.kassasService.updateBalance(tx, dto.fromKassaId, -dto.amount);
+      await this.kassasService.updateBalance(
+        tx,
+        dto.fromKassaId,
+        -Number(amountDecimal),
+      );
 
-      // Зачисляем на получателя
       await this.kassasService.updateBalance(
         tx,
         dto.toKassaId,
         Number(convertedAmount),
       );
+
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'TRANSFER',
+        entity: 'KassaTransfer',
+        entityId: transfer.id,
+        newValue: {
+          fromKassa: transfer.from_kassa.name,
+          toKassa: transfer.to_kassa.name,
+          amount: dto.amount,
+          convertedAmount,
+          rate: dto.rate,
+        },
+        note: `Перевод между кассами: ${fromKassa.name} → ${toKassa.name}`,
+      });
 
       return {
         ...transfer,
@@ -87,13 +121,18 @@ export class KassaTransfersService {
     });
   }
 
-  async findAll(tenant: Tenant, filter?: { page?: number; limit?: number }) {
+  async findAll(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    filter?: { page?: number; limit?: number },
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
     const { page = 1, limit = 20 } = filter || {};
 
     const [data, total] = await Promise.all([
       client.kassaTransfer.findMany({
-        where: { organizationId: tenant.id },
+        where: { organizationId },
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -104,7 +143,7 @@ export class KassaTransfersService {
           to_currency: { select: { code: true } },
         },
       }),
-      client.kassaTransfer.count({ where: { organizationId: tenant.id } }),
+      client.kassaTransfer.count({ where: { organizationId } }),
     ]);
 
     const transformed = data.map((t) => ({
@@ -115,5 +154,45 @@ export class KassaTransfersService {
     }));
 
     return { data: transformed, total, page, limit };
+  }
+
+  async findOne(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
+
+    const transfer = await client.kassaTransfer.findFirst({
+      where: { id, organizationId },
+      include: {
+        from_kassa: {
+          select: {
+            id: true,
+            name: true,
+            currency: { select: { code: true } },
+          },
+        },
+        to_kassa: {
+          select: {
+            id: true,
+            name: true,
+            currency: { select: { code: true } },
+          },
+        },
+        from_currency: { select: { code: true } },
+        to_currency: { select: { code: true } },
+      },
+    });
+
+    if (!transfer) {
+      throw new NotFoundException(
+        'Перевод не найден или принадлежит другой организации',
+      );
+    }
+
+    return {
+      ...transfer,
+      amount: Number(transfer.amount),
+      convertedAmount: Number(transfer.convertedAmount),
+      rate: Number(transfer.rate),
+    };
   }
 }

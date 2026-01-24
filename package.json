@@ -27,8 +27,10 @@
     "migrate:tenant:deploy": "npx prisma migrate deploy --schema=./prisma/tenant/tenant.prisma",
     "studio:main": "npx prisma studio --schema=./prisma/main/schema.prisma",
     "studio:tenant": "npx prisma studio --schema=./prisma/tenant/tenant.prisma",
-    "migrate:reset:tenant" : "npx prisma migrate reset --schema=./prisma/tenant/tenant.prisma",
-    "migrate:reset:main" : "npx prisma migrate reset --schema=./prisma/main/schema.prisma"
+    "migrate:reset:tenant": "npx prisma migrate reset --schema=./prisma/tenant/tenant.prisma",
+    "migrate:reset:main": "npx prisma migrate reset --schema=./prisma/main/schema.prisma",
+    "diff:tenant": "npx prisma diff --schema=./prisma/tenant/tenant.prisma",
+    "diff:main": "npx prisma diff --schema=./prisma/main/schema.prisma"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.956.0",
@@ -40,6 +42,7 @@
     "@nestjs/mapped-types": "*",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.9",
+    "@nestjs/schedule": "^6.1.0",
     "@nestjs/swagger": "^11.2.1",
     "@prisma/client": "^6.18.0",
     "bcrypt": "^6.0.0",

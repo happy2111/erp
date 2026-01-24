@@ -1,14 +1,13 @@
-import {IsNotEmpty, IsOptional, IsString, IsUUID} from 'class-validator';
-import {ApiProperty} from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsUUID, IsOptional, IsString } from 'class-validator';
 
 export class MarkLostDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-product-instance' })
   @IsUUID()
   instanceId: string;
-  @ApiProperty({required: false})
+
+  @ApiPropertyOptional({ example: 'Утерян при транспортировке' })
   @IsOptional()
   @IsString()
-  description?: string | null;
+  description?: string;
 }

@@ -9,10 +9,13 @@ import { Tenant } from '@prisma/client';
 import { PaymentType, Prisma, PurchaseStatus } from '.prisma/client-tenant';
 import { StocksService } from '../stocks/stocks.service';
 import { KassasService } from '../kassas/kassas.service';
+import { AuditHelper } from '../audit-logs/audit.helper';
+import { TransactionsService } from '../transactions/transactions.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
-import { CodeGeneratorService } from '../code-generater/code-generater.service';
 import { PurchaseFilterDto } from './dto/purchase-filter.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
+import { CodeGeneratorService } from '../code-generater/code-generater.service';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class PurchasesService {
@@ -21,10 +24,17 @@ export class PurchasesService {
     private readonly codeGenerator: CodeGeneratorService,
     private readonly stocksService: StocksService,
     private readonly kassasService: KassasService,
+    private readonly transactionsService: TransactionsService,
+    private readonly auditHelper: AuditHelper,
   ) {}
 
-  async create(tenant: Tenant, dto: CreatePurchaseDto) {
+  async create(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: CreatePurchaseDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     // 1. Проверяем валюту
     const currency = await client.currency.findUnique({
@@ -32,34 +42,49 @@ export class PurchasesService {
     });
     if (!currency) throw new BadRequestException('Валюта не найдена');
 
-    // 2. Проверяем поставщика
+    // 2. Проверяем поставщика и его принадлежность организации
     const supplier = await client.organizationCustomer.findFirst({
       where: {
         id: dto.supplierId,
-        organizationId: tenant.id,
+        organizationId,
         type: 'SUPPLIER',
       },
     });
-    if (!supplier) throw new NotFoundException('Поставщик не найден');
+    if (!supplier)
+      throw new NotFoundException('Поставщик не найден в этой организации');
 
-    // 3. Генерируем номер накладной
+    // 3. Проверяем ответственного (если указан)
+    if (dto.responsibleId) {
+      const responsible = await client.organizationUser.findFirst({
+        where: { id: dto.responsibleId, organizationId },
+      });
+      if (!responsible)
+        throw new BadRequestException(
+          'Ответственный не найден в этой организации',
+        );
+    }
+
+    // 4. Генерируем номер накладной
     const invoiceNumber = await this.codeGenerator.generateNextCode(tenant, {
       prefix: 'PUR',
       modelName: 'purchase',
       sequenceLength: 6,
     });
 
-    // 4. Собираем позиции + проверяем товары
+    // 5. Собираем позиции + проверяем товары
     const purchaseItemsData = await Promise.all(
       dto.items.map(async (item) => {
-        const variant = await client.productVariant.findUnique({
-          where: { id: item.productVariantId },
+        const variant = await client.productVariant.findFirst({
+          where: {
+            id: item.productVariantId,
+            product: { organizationId },
+          },
           include: { currency: true },
         });
 
         if (!variant)
           throw new NotFoundException(
-            `Вариант товара ${item.productVariantId} не найден`,
+            `Вариант товара ${item.productVariantId} не найден или принадлежит другой организации`,
           );
 
         if (variant.currencyId && variant.currencyId !== dto.currencyId) {
@@ -82,19 +107,19 @@ export class PurchasesService {
       }),
     );
 
-    // 5. Считаем общую сумму
+    // 6. Считаем общую сумму
     const totalAmount = purchaseItemsData.reduce(
       (sum, item) => sum.add(item.total),
       new Prisma.Decimal(0),
     );
 
-    // 6. Создаём закупку + позиции + приход на склад в транзакции
     return client.$transaction(async (tx) => {
+      // Создаём закупку
       const purchase = await tx.purchase.create({
         data: {
-          organizationId: tenant.id,
+          organizationId,
           supplierId: dto.supplierId,
-          responsibleId: dto.responsibleId,
+          responsibleId: dto.responsibleId || user.orgUserId, // по умолчанию текущий пользователь
           kassaId: dto.kassaId,
           invoiceNumber,
           purchaseDate: new Date(),
@@ -120,15 +145,30 @@ export class PurchasesService {
         },
       });
 
-      // Приход на склад (увеличиваем остатки)
+      // Приход на склад
       for (const item of purchaseItemsData) {
         await this.stocksService.incrementStock(
           tx,
-          tenant.id,
+          organizationId,
           item.productVariantId,
           item.quantity,
         );
       }
+
+      // Логируем создание закупки
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'CREATE',
+        entity: 'Purchase',
+        entityId: purchase.id,
+        newValue: {
+          invoiceNumber,
+          supplierId: dto.supplierId,
+          totalAmount: Number(totalAmount),
+          status: purchase.status,
+        },
+        note: `Создана новая закупка ${invoiceNumber}`,
+      });
 
       return {
         ...purchase,
@@ -138,11 +178,17 @@ export class PurchasesService {
     });
   }
 
-  async findAll(tenant: Tenant, filter: PurchaseFilterDto) {
+  async findAll(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    filter: PurchaseFilterDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
+
     const { page = 1, limit = 20, search, status, supplierId } = filter;
 
-    const where: Prisma.PurchaseWhereInput = { organizationId: tenant.id };
+    const where: Prisma.PurchaseWhereInput = { organizationId };
 
     if (search) {
       where.OR = [
@@ -182,11 +228,12 @@ export class PurchasesService {
     return { data: transformed, total, page, limit };
   }
 
-  async findOne(tenant: Tenant, id: string) {
+  async findOne(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     const purchase = await client.purchase.findFirst({
-      where: { id, organizationId: tenant.id },
+      where: { id, organizationId },
       include: {
         items: {
           include: {
@@ -203,7 +250,11 @@ export class PurchasesService {
       },
     });
 
-    if (!purchase) throw new NotFoundException('Закупка не найдена');
+    if (!purchase) {
+      throw new NotFoundException(
+        'Закупка не найдена или принадлежит другой организации',
+      );
+    }
 
     return {
       ...purchase,
@@ -212,13 +263,23 @@ export class PurchasesService {
     };
   }
 
-  async update(tenant: Tenant, id: string, dto: UpdatePurchaseDto) {
+  async update(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    id: string,
+    dto: UpdatePurchaseDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     const existing = await client.purchase.findFirst({
-      where: { id, organizationId: tenant.id },
+      where: { id, organizationId },
+      include: { payments: true },
     });
-    if (!existing) throw new NotFoundException('Закупка не найдена');
+    if (!existing)
+      throw new NotFoundException(
+        'Закупка не найдена или принадлежит другой организации',
+      );
 
     // Запрещаем менять статус/поставщика если уже есть оплаты
     if (existing.paidAmount.greaterThan(0) && (dto.status || dto.supplierId)) {
@@ -227,25 +288,50 @@ export class PurchasesService {
       );
     }
 
-    return client.purchase.update({
-      where: { id },
-      data: dto,
-      include: {
-        currency: true,
-        supplier: true,
-      },
+    return client.$transaction(async (tx) => {
+      const updated = await tx.purchase.update({
+        where: { id },
+        data: dto,
+        include: {
+          currency: true,
+          supplier: true,
+        },
+      });
+
+      // Логируем изменение
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'UPDATE',
+        entity: 'Purchase',
+        entityId: id,
+        oldValue: {
+          status: existing.status,
+          supplierId: existing.supplierId,
+        },
+        newValue: {
+          status: updated.status,
+          supplierId: updated.supplierId,
+        },
+        note: `Обновлена закупка ${updated.invoiceNumber || id}`,
+      });
+
+      return updated;
     });
   }
 
-  async remove(tenant: Tenant, id: string) {
+  async remove(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     const purchase = await client.purchase.findFirst({
-      where: { id, organizationId: tenant.id },
+      where: { id, organizationId },
       include: { payments: true, items: true },
     });
 
-    if (!purchase) throw new NotFoundException('Закупка не найдена');
+    if (!purchase)
+      throw new NotFoundException(
+        'Закупка не найдена или принадлежит другой организации',
+      );
     if (purchase.payments.length > 0) {
       throw new ConflictException(
         'Невозможно удалить закупку — есть связанные платежи',
@@ -253,79 +339,129 @@ export class PurchasesService {
     }
 
     return client.$transaction(async (tx) => {
-      // Возвращаем товары на склад (уменьшаем остатки)
+      // Возвращаем товары на склад
       for (const item of purchase.items) {
         await this.stocksService.decrementStock(
           tx,
-          tenant.id,
+          organizationId,
           item.productVariantId,
           item.quantity,
         );
       }
 
+      // Логируем удаление
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'DELETE',
+        entity: 'Purchase',
+        entityId: id,
+        oldValue: {
+          invoiceNumber: purchase.invoiceNumber,
+          totalAmount: Number(purchase.totalAmount),
+        },
+        note: `Удалена закупка ${purchase.invoiceNumber || id}`,
+      });
+
       await tx.purchase.delete({ where: { id } });
     });
   }
 
-  // Подтверждение закупки (перевод в PAID + списание с кассы, если указана)
-  async confirmPurchase(tenant: Tenant, purchaseId: string, kassaId?: string) {
+  async confirmPurchase(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    purchaseId: string,
+    kassaId?: string,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const organizationId = user.orgId;
 
     return client.$transaction(async (tx) => {
       const purchase = await tx.purchase.findFirst({
-        where: { id: purchaseId, organizationId: tenant.id },
+        where: { id: purchaseId, organizationId },
         include: { payments: true },
       });
 
-      if (!purchase) throw new NotFoundException('Закупка не найдена');
+      if (!purchase)
+        throw new NotFoundException(
+          'Закупка не найдена или принадлежит другой организации',
+        );
       if (purchase.status === PurchaseStatus.PAID) {
         throw new BadRequestException('Закупка уже подтверждена');
       }
 
       let paidAmount = purchase.paidAmount;
 
-      // Если указана касса — списываем с неё всю сумму
+      // Если указана касса — списываем с неё оставшуюся сумму
       if (kassaId) {
         const kassa = await tx.kassa.findFirst({
-          where: { id: kassaId, organizationId: tenant.id },
+          where: { id: kassaId, organizationId },
         });
-        if (!kassa) throw new NotFoundException('Касса не найдена');
+        if (!kassa)
+          throw new NotFoundException(
+            'Касса не найдена или принадлежит другой организации',
+          );
 
-        if (kassa.balance.lessThan(purchase.totalAmount.sub(paidAmount))) {
+        const remaining = purchase.totalAmount.sub(paidAmount);
+        if (kassa.balance.lessThan(remaining)) {
           throw new BadRequestException(
-            'Недостаточно средств на кассе для полной оплаты',
+            `Недостаточно средств на кассе ${kassa.name} для полной оплаты`,
           );
         }
 
-        await this.kassasService.updateBalance(
-          tx,
-          kassaId,
-          -Number(purchase.totalAmount.sub(paidAmount)),
-        );
+        await this.kassasService.updateBalance(tx, kassaId, -Number(remaining));
 
         // Создаём платёж
-        await tx.payment.create({
+        const payment = await tx.payment.create({
           data: {
-            organizationId: tenant.id,
+            organizationId,
+            userId: user.orgUserId,
             kassaId,
-            amount: purchase.totalAmount.sub(paidAmount),
+            amount: remaining,
             currencyId: purchase.currencyId,
             type: PaymentType.EXPENSE,
-            description: `Оплата закупки ${purchase.invoiceNumber || purchase.id}`,
+            description: `Полная оплата закупки ${purchase.invoiceNumber || purchase.id}`,
             purchaseId,
           },
         });
 
         paidAmount = purchase.totalAmount;
+
+        // Логируем платёж
+        await this.auditHelper.log(tx, organizationId, {
+          userId: user.userId,
+          action: 'PAYMENT',
+          entity: 'Payment',
+          entityId: payment.id,
+          newValue: {
+            amount: Number(remaining),
+            type: PaymentType.EXPENSE,
+            kassaId,
+          },
+          note: `Полная оплата закупки ${purchase.invoiceNumber || purchase.id}`,
+        });
       }
 
-      await tx.purchase.update({
+      const updated = await tx.purchase.update({
         where: { id: purchaseId },
         data: {
           status: PurchaseStatus.PAID,
           paidAmount,
           kassaId: kassaId || purchase.kassaId,
         },
+      });
+
+      // Логируем подтверждение
+      await this.auditHelper.log(tx, organizationId, {
+        userId: user.userId,
+        action: 'CONFIRM',
+        entity: 'Purchase',
+        entityId: purchaseId,
+        oldValue: { status: purchase.status },
+        newValue: {
+          status: PurchaseStatus.PAID,
+          paidAmount: Number(paidAmount),
+        },
+        note: `Закупка ${purchase.invoiceNumber || purchase.id} подтверждена как оплаченная`,
       });
 
       return { message: 'Закупка успешно подтверждена' };

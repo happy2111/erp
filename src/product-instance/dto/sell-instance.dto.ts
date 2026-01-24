@@ -1,31 +1,22 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class SellInstanceDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-product-instance' })
   @IsUUID()
   instanceId: string;
 
-  @ApiProperty({ required: false, nullable: true })
-  @IsOptional()
-  @IsString()
-  @IsUUID()
-  @Type(() => String)
-  saleId?: string | null;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ example: 'uuid-customer' })
   @IsUUID()
   customerId: string;
 
-  @ApiProperty({ required: false, nullable: true })
+  @ApiPropertyOptional({ example: 'uuid-sale' })
+  @IsOptional()
+  @IsUUID()
+  saleId?: string;
+
+  @ApiPropertyOptional({ example: 'Продажа по чеку №123' })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
-  @Type(() => String)
-  description?: string | null;
+  description?: string;
 }

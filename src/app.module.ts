@@ -24,7 +24,6 @@ import { ProductCategoryModule } from './product-category/product-category.modul
 import { ProductPriceModule } from './product-price/product-price.module';
 import { ProductBatchModule } from './product-batch/product-batch.module';
 import { ProductInstanceModule } from './product-instance/product-instance.module';
-import { ProductTransactionModule } from './product-transaction/product-transaction.module';
 import { MainUserRefreshTokenModule } from './main-user-refresh-token/main-user-refresh-token.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { S3Module } from './s3/s3.module';
@@ -35,9 +34,15 @@ import { StocksModule } from './stocks/stocks.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { InstallmentsModule } from './installments/installments.module';
+import { TasksModule } from './tasks/tasks.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { TransactionsModule } from './transactions/transactions.module';
+import { ProductTransactionsModule } from './product-transactions/product-transactions.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -63,7 +68,6 @@ import { InstallmentsModule } from './installments/installments.module';
     ProductPriceModule,
     ProductBatchModule,
     ProductInstanceModule,
-    ProductTransactionModule,
     MainUserRefreshTokenModule,
     S3Module,
     KassasModule,
@@ -73,6 +77,10 @@ import { InstallmentsModule } from './installments/installments.module';
     PaymentsModule,
     PurchasesModule,
     InstallmentsModule,
+    TasksModule,
+    TransactionsModule,
+    ProductTransactionsModule,
+    AuditLogsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

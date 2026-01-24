@@ -5,12 +5,21 @@ import {
   Post,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { TenantAuthService } from './tenant-auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Request, Response } from 'express';
 import { TenantLoginDto } from './dto/login.dto';
+import type { JwtAuthenticatedUser, JwtUser } from './interfaces/jwt.interface';
+import { JwtAuthGuard } from './guards/jwt.guard';
+import { ApiKeyGuard } from '../guards/api-key.guard';
+import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import type { Tenant } from '@prisma/client';
+import { ApiSecurity } from '@nestjs/swagger';
+import { CurrentTenantUser } from './decorators/current-tenant-user.decorator';
 
+@ApiSecurity('x-tenant-key')
 @Controller('tenant-auth')
 export class TenantAuthController {
   constructor(
@@ -47,7 +56,24 @@ export class TenantAuthController {
 
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('accessToken');
     res.clearCookie('refreshToken');
     return { message: 'Logout successful' };
+  }
+
+  @Post('switch-organization')
+  @UseGuards(JwtAuthGuard, ApiKeyGuard)
+  async switchOrg(
+    @Body() body: { orgUserId: string },
+    @Res({ passthrough: true }) res: Response,
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+  ) {
+    return this.authService.switchOrganization(
+      res,
+      tenant,
+      user.userId,
+      body.orgUserId,
+    );
   }
 }

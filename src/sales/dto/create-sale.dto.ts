@@ -10,6 +10,8 @@ import {
 import { Type } from 'class-transformer';
 import { SaleStatus } from '.prisma/client-tenant';
 
+import { CreateInstallmentDto } from '../../installments/dto/create-installment.dto';
+
 export class CreateSaleItemDto {
   @ApiProperty({
     example: 'uuid-product-variant',
@@ -78,4 +80,14 @@ export class CreateSaleDto {
   @ApiProperty({ example: 'UZS', description: 'ID валюты продажи' })
   @IsUUID()
   currencyId: string;
+
+  // НОВОЕ ПОЛЕ — опциональная рассрочка
+  @ApiPropertyOptional({
+    type: CreateInstallmentDto,
+    description: 'Данные для создания рассрочки (если нужна)',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateInstallmentDto)
+  installment?: CreateInstallmentDto;
 }

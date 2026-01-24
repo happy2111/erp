@@ -24,7 +24,7 @@ export class PrismaTenantService {
     const client = new TenantPrismaClient({
       datasources: {
         db: { url },
-      }
+      },
     });
 
     // Кэшируем для переиспользования

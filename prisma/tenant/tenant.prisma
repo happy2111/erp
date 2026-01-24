@@ -253,6 +253,9 @@ model OrganizationCustomer {
   installments      Installment[] /* Рассрочки, оформленные клиентом */
   documents         Document[] /* Документы, связанные с клиентом (договоры, акты, счета и т.д.) */
 
+  transactionsFrom ProductTransaction[] @relation("from_customer")
+  transactionsTo   ProductTransaction[] @relation("to_customer")
+
   @@map("organization_customers")
 }
 
@@ -470,6 +473,9 @@ model ProductTransaction {
   description       String? /* Дополнительное описание или комментарий к транзакции, пример: "Возврат по гарантии" */
   product_instance  ProductInstance @relation(fields: [productInstanceId], references: [id], onDelete: Cascade) /* Связь с экземпляром товара (ProductInstance) */
 
+  from_customer OrganizationCustomer? @relation("from_customer", fields: [fromCustomerId], references: [id])
+  to_customer   OrganizationCustomer? @relation("to_customer", fields: [toCustomerId], references: [id])
+
   @@map("product_transactions") /* Имя таблицы в базе данных */
 }
 
@@ -608,6 +614,7 @@ model Transaction {
   balanceAfter   Decimal     @map("balance_after") /* Баланс клиента после транзакции, пример: 50000.00 */
   currencyId     String      @map("currency_id") /* ID валюты, в которой совершена операция */
   description    String? /* Необязательное описание транзакции, пример: "Оплата по счёту №1234" */
+  createdById    String?     @map("created_by_id") /*ID пользователя, создавшего запись */
 
   organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict) /* Связь с организацией */
   customer     OrganizationCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict) /* Связь с клиентом или контрагентом */
