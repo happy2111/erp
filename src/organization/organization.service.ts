@@ -100,7 +100,7 @@ export class OrganizationService {
       include: {
         org_users: {
           where: { userId: user.userId },
-          select: { role: true, position: true },
+          select: { id: true, role: true, position: true },
         },
         settings: true,
         kassas: {

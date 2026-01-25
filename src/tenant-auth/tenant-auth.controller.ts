@@ -88,8 +88,19 @@ export class TenantAuthController {
 
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+    });
+
+    // 2. Очистка Refresh Token (ВАЖНО: укажи путь, если он был задан при login)
+    res.clearCookie('refreshToken', {
+      path: '/tenant-auth/refresh',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+    });
     return { message: 'Logout successful' };
   }
 
