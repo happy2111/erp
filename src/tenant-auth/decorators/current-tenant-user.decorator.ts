@@ -15,10 +15,27 @@ export function CurrentTenantUser(key?: any): ParameterDecorator {
     const req = ctx.switchToHttp().getRequest<{ user: JwtUser }>();
     const user = req.user;
 
-    if (!user || !('orgId' in user)) {
+    if (!user || !('orgUserId' in user)) {
       throw new UnauthorizedException('Organization context required');
     }
 
     return key ? user[key] : user;
   })();
 }
+
+
+
+export const CurrentUser = createParamDecorator(
+  (data: keyof JwtUser | undefined, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user as JwtUser;
+
+    if (!user) {
+      throw new UnauthorizedException('No user found in request');
+    }
+
+    // Instead of forcing orgUserId, just return the user.
+    // The service logic will handle the validation.
+    return data ? user[data] : user;
+  },
+);

@@ -16,8 +16,20 @@ import { JwtAuthGuard } from './guards/jwt.guard';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import type { Tenant } from '@prisma/client';
-import { ApiSecurity } from '@nestjs/swagger';
-import { CurrentTenantUser } from './decorators/current-tenant-user.decorator';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
+import {
+  CurrentTenantUser,
+  CurrentUser,
+} from './decorators/current-tenant-user.decorator';
+import {
+  LoginRequiresOrgSelectionResponseDto,
+  LoginSuccessResponseDto,
+} from './dto/doc.dto';
 
 @ApiSecurity('x-tenant-key')
 @Controller('tenant-auth')
@@ -28,6 +40,26 @@ export class TenantAuthController {
   ) {}
 
   @Post('login')
+  @ApiOperation({ summary: 'Tenant login' })
+  @ApiBody({ type: TenantLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful (single organization)',
+    type: LoginSuccessResponseDto,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User must select organization',
+    type: LoginRequiresOrgSelectionResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid credentials',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Tenant not found or user has no organizations',
+  })
   async login(
     @Req() req: Request,
     @Body() dto: TenantLoginDto,
@@ -67,12 +99,14 @@ export class TenantAuthController {
     @Body() body: { orgUserId: string },
     @Res({ passthrough: true }) res: Response,
     @CurrentTenant() tenant: Tenant,
-    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @CurrentUser() user: JwtUser,
   ) {
+    const userId = (user as any).userId || (user as any).sub;
+
     return this.authService.switchOrganization(
       res,
       tenant,
-      user.userId,
+      userId,
       body.orgUserId,
     );
   }

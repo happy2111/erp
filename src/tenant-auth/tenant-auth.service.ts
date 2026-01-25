@@ -75,13 +75,25 @@ export class TenantAuthService {
         new Date(Date.now() + 5 * 60 * 1000),
       );
 
+      const orgsWithNames = await Promise.all(
+        orgUsers.map(async (ou) => {
+          const org = await client.organization.findUnique({
+            where: { id: ou.organizationId },
+            select: { name: true },
+          });
+
+          return {
+            orgName: org?.name || 'Unknown',
+            orgUserId: ou.id,
+            orgId: ou.organizationId,
+            role: ou.role,
+          };
+        }),
+      );
+
       return {
         requiresOrgSelection: true,
-        organizations: orgUsers.map((ou) => ({
-          orgUserId: ou.id,
-          orgId: ou.organizationId,
-          role: ou.role,
-        })),
+        organizations: orgsWithNames,
         apiKey: tenant.apiKey,
       };
     }
