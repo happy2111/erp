@@ -110,4 +110,14 @@ export class TenantAuthController {
       body.orgUserId,
     );
   }
+
+  @Post('me')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  @ApiOperation({ summary: 'Получить текущего пользователя' })
+  me(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+  ) {
+    return this.authService.me(tenant, user);
+  }
 }

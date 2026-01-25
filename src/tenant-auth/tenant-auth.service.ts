@@ -4,7 +4,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { SignOptions } from 'jsonwebtoken';
-import { JwtPayload, JwtUser } from './interfaces/jwt.interface';
+import {
+  JwtAuthenticatedUser,
+  JwtPayload,
+  JwtUser,
+} from './interfaces/jwt.interface';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import type { Response, Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
@@ -305,6 +309,32 @@ export class TenantAuthService {
     }
 
     return null;
+  }
+
+  async me(tenant: Tenant, user: JwtAuthenticatedUser) {
+    const client = await this.prismaTenant.getTenantClientById(tenant.id);
+
+    const orgUser = await client.organizationUser.findUnique({
+      where: { id: user.orgUserId },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            phone_numbers: true,
+          },
+        },
+      },
+    });
+
+    if (!orgUser || !orgUser.user.isActive) {
+      throw new UnauthorizedException();
+    }
+
+    return {
+      user: this.serializeUser(orgUser.user, orgUser.role),
+      organizationId: orgUser.organizationId,
+      apiKey: tenant.apiKey,
+    };
   }
 
   async switchOrganization(
