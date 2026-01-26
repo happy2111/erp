@@ -126,7 +126,7 @@ export class OrganizationUserController {
 
   @Delete('remove/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
   async deleteOrganizationUser(
     @CurrentTenant() tenant: Tenant,
     @Param('id') id: string,

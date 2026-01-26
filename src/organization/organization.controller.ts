@@ -62,23 +62,9 @@ export class OrganizationController {
     return this.organizationService.findAllForUser(tenant, user);
   }
 
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({
-    summary: 'Получить организацию по ID (только если есть доступ)',
-  })
-  @ApiParam({ name: 'id', description: 'ID организации' })
-  findOneForUser(
-    @CurrentTenant() tenant: Tenant,
-    @CurrentTenantUser() user: JwtAuthenticatedUser,
-    @Param('id') id: string,
-  ) {
-    return this.organizationService.findOneForUser(tenant, user, id);
-  }
-
   @Get('admin/all')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @ApiOperation({ summary: 'Получить список всех организаций (для админа)' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
@@ -88,6 +74,10 @@ export class OrganizationController {
     @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query() query: GetOrganizationsQueryDto,
   ) {
+    console.log('start');
+    console.log(JSON.stringify(query, null, 2));
+    console.log(JSON.stringify(user, null, 2));
+
     return this.organizationService.findAll(tenant, user, query);
   }
 
@@ -120,7 +110,7 @@ export class OrganizationController {
 
   @Delete('remove/:id/hard')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.OWNER)
+  @Roles(OrgUserRole.OWNER, OrgUserRole.ADMIN)
   @ApiOperation({ summary: 'Жёсткое удаление организации (только OWNER)' })
   @ApiParam({ name: 'id' })
   remove(
@@ -129,5 +119,19 @@ export class OrganizationController {
     @Param('id') id: string,
   ) {
     return this.organizationService.remove(tenant, user, id);
+  }
+
+  @Get(':id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Получить организацию по ID (только если есть доступ)',
+  })
+  @ApiParam({ name: 'id', description: 'ID организации' })
+  findOneForUser(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.organizationService.findOneForUser(tenant, user, id);
   }
 }

@@ -164,7 +164,13 @@ export class OrganizationService {
     query: GetOrganizationsQueryDto,
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const { search, order = 'desc', sortField = 'createdAt' } = query;
+    const {
+      search,
+      order = 'desc',
+      sortField = 'createdAt',
+      page = 1,
+      limit = 10,
+    } = query;
 
     const where: Prisma.OrganizationWhereInput = {};
 
@@ -176,17 +182,24 @@ export class OrganizationService {
       ];
     }
 
-    return client.organization.findMany({
-      where,
-      orderBy: { [sortField]: order },
-      include: {
-        org_users: {
-          select: { userId: true, role: true },
-          take: 3,
+    const [items, total] = await Promise.all([
+      client.organization.findMany({
+        where,
+        orderBy: { [sortField]: order },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          org_users: {
+            select: { userId: true, role: true },
+            take: 3,
+          },
+          settings: true,
         },
-        settings: true,
-      },
-    });
+      }),
+      client.organization.count({ where }),
+    ]);
+
+    return { items, total };
   }
 
   async findById(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
