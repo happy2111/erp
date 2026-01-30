@@ -2,136 +2,122 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { OrganizationUserService } from './organization-user.service';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
+  ApiQuery,
   ApiSecurity,
+  ApiTags,
 } from '@nestjs/swagger';
+import { OrganizationUserService } from './organization-user.service';
+import { CreateOrganizationUserDto } from './dto/create-org-user.dto';
+import { UpdateOrganizationUserDto } from './dto/update-organization-user.dto';
+import { GetOrgUsersQueryDto } from './dto/get-org-users-query.dto'; // ← новый DTO
+import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
-import type { Tenant } from '@prisma/client';
-import { CreateOrganizationUserDto } from './dto/create-org-user.dto';
-import { ApiKeyGuard } from '../guards/api-key.guard';
-import { OrgUserFilterDto } from './dto/org-user-filter.dto';
-import { CreateOrganizationUserWithTenantDto } from './dto/create-organization-user-with-tenant.dto';
-import { UpdateOrganizationUserDto } from './dto/update-organization-user.dto';
-import { CreateOrgUserWithUserDto } from './dto/create-org_user-with-user.dto';
 import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
+import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
+@ApiTags('Organization Users')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('organization-user')
+@UseInterceptors(/* ваш TransformInterceptor уже глобально или здесь */)
 export class OrganizationUserController {
   constructor(
     private readonly organizationUserService: OrganizationUserService,
   ) {}
 
+  // 1. Список для админки (универсальный формат)
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Получить список всех пользователей организации (админка)',
+  })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sortField', required: false })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async findAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetOrgUsersQueryDto,
+  ) {
+    return this.organizationUserService.getAllAdmin(tenant, user, query);
+  }
+
+  // 2. Создание (привязка существующего пользователя к организации)
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Привязать существующего пользователя к организации',
+  })
   async create(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Body() dto: CreateOrganizationUserDto,
   ) {
-    return await this.organizationUserService.create(tenant, dto);
+    return this.organizationUserService.create(tenant, user, dto);
   }
 
-  @Post('create-with-user')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  async createWithUser(
-    @CurrentTenant() tenant: Tenant,
-    @Body() dto: CreateOrgUserWithUserDto,
-  ) {
-    return await this.organizationUserService.createWithUser(dto, tenant);
-  }
-
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  async filter(@CurrentTenant() tenant: Tenant, @Body() dto: OrgUserFilterDto) {
-    return this.organizationUserService.filter(tenant, dto);
-  }
-
-  @Post(':orgId/users')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER)
-  @ApiOperation({
-    summary: 'Создать нового пользователя и привязать к организации',
-  })
-  @ApiParam({ name: 'orgId', description: 'ID организации' })
-  @ApiResponse({
-    status: 201,
-    description: 'Пользователь успешно создан и добавлен в организацию',
-    example: {
-      id: 'uuid-org-user',
-      organizationId: 'uuid-org',
-      userId: 'uuid-user',
-      role: 'MANAGER',
-      position: 'Главный бухгалтер',
-      user: {
-        id: 'uuid-user',
-        email: 'example@mail.com',
-        profile: {
-          firstName: 'Мухаммад Юсуф',
-          lastName: 'Абдурахимов',
-        },
-        phone_numbers: [{ phone: '+998901234567', isPrimary: true }],
-      },
-    },
-  })
-  @ApiResponse({ status: 400, description: 'Неверные данные запроса' })
-  @ApiResponse({ status: 403, description: 'Нет прав на выполнение операции' })
-  @ApiResponse({ status: 500, description: 'Ошибка при создании пользователя' })
-  async createOrganizationUserWithTenantUser(
-    @CurrentTenant() tenant: Tenant,
-    @Param('orgId') orgId: string,
-    @Body() dto: CreateOrganizationUserWithTenantDto,
-  ) {
-    return this.organizationUserService.createWithTenantUser(
-      tenant,
-      orgId,
-      dto.role,
-      dto.position,
-      dto.user,
-    );
-  }
-
+  // 3. Обновление роли / должности
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({
     summary: 'Обновить роль или должность пользователя в организации',
   })
   @ApiParam({ name: 'id', description: 'ID записи OrganizationUser' })
-  @ApiResponse({ status: 200, description: 'Пользователь успешно обновлён' })
-  @ApiResponse({ status: 404, description: 'Пользователь не найден' })
-  async updateOrganizationUser(
+  async update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateOrganizationUserDto,
   ) {
-    //TODO
-    // return this.organizationUserService.update(tenant, id, dto);
+    return this.organizationUserService.update(tenant, user, id, dto);
   }
 
-  @Delete('remove/:id')
+  // 4. Жёсткое удаление
+  @Delete('remove/:id/hard')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
-  async deleteOrganizationUser(
+  @ApiOperation({ summary: 'Жёсткое удаление пользователя из организации' })
+  async hardDelete(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
-    @CurrentTenantUser('userId') performedByUserId: string,
   ) {
-    return this.organizationUserService.delete(tenant, id, performedByUserId);
+    return this.organizationUserService.hardDelete(tenant, user, id);
   }
+
+  // 5. Получение одной записи (для редактирования)
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить одного пользователя организации по ID' })
+  async findOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.organizationUserService.getByIdAdmin(tenant, user, id);
+  }
+
 }

@@ -1,5 +1,5 @@
-import {ApiProperty} from "@nestjs/swagger";
-import {IsEnum, IsOptional, IsString} from "class-validator";
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 
 export enum GenderDtoEnum {
   MALE = 'MALE',
@@ -67,21 +67,20 @@ export class CreateTenantUserProfileDto {
   address?: string;
 
   @ApiProperty({
-    description: "Propiska addressi",
-    example: "123 Main St, Anytown, Uzbekistan",
-    required: false
+    description: 'Propiska addressi',
+    example: '123 Main St, Anytown, Uzbekistan',
+    required: false,
   })
   @IsString()
   @IsOptional()
   registration?: string;
 
   @ApiProperty({
-    description: "Hudud, Rayon",
-    example: "Мирзо-Улугбекский район",
-    required: false
+    description: 'Hudud, Rayon',
+    example: 'Мирзо-Улугбекский район',
+    required: false,
   })
   @IsString()
   @IsOptional()
   district?: string;
-
 }

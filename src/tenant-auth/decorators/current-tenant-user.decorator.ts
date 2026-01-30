@@ -23,8 +23,6 @@ export function CurrentTenantUser(key?: any): ParameterDecorator {
   })();
 }
 
-
-
 export const CurrentUser = createParamDecorator(
   (data: keyof JwtUser | undefined, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();

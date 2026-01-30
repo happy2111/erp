@@ -5,12 +5,14 @@ import {
   ValidateNested,
   IsBoolean,
   IsArray,
-  ArrayMinSize, Length, Matches,
+  ArrayMinSize,
+  Length,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import {CreateTenantUserProfileDto} from './create-tenant-user-profile.dto'
-import {CreateUserPhoneDto} from "./create-tenant-user-phone.dto";
+import { CreateTenantUserProfileDto } from './create-tenant-user-profile.dto';
+import { CreateUserPhoneDto } from './create-tenant-user-phone.dto';
 
 export class CreateTenantUserDto {
   @ApiProperty({ example: 'user@example.com', required: false })
@@ -22,7 +24,8 @@ export class CreateTenantUserDto {
   @IsString()
   @Length(8, 255, { message: 'Пароль должен быть длиной от 8 до 255 символов' })
   @Matches(/^(?=.*[A-Z])(?=.*\d).{8,255}$/, {
-    message: 'Пароль должен содержать минимум одну заглавную букву (A-Z) и минимум одну цифру (0-9).',
+    message:
+      'Пароль должен содержать минимум одну заглавную букву (A-Z) и минимум одну цифру (0-9).',
   })
   password: string;
 
@@ -36,10 +39,10 @@ export class CreateTenantUserDto {
   @Type(() => CreateTenantUserProfileDto)
   profile: CreateTenantUserProfileDto;
 
-  // 🔑 Правильное определение массива DTO:
   @ApiProperty({
     type: () => [CreateUserPhoneDto], // Указываем Swagger, что это массив CreateUserPhoneDto
-    description: 'Список номеров телефонов пользователя. Должен содержать хотя бы один основной номер.'
+    description:
+      'Список номеров телефонов пользователя. Должен содержать хотя бы один основной номер.',
   })
   @IsArray()
   @ArrayMinSize(1) // Требуем хотя бы один номер
@@ -47,32 +50,3 @@ export class CreateTenantUserDto {
   @Type(() => CreateUserPhoneDto) // <--- Трансформируем каждый элемент массива в CreateUserPhoneDto
   phone_numbers: CreateUserPhoneDto[];
 }
-
-
-// export class CreateTenantUserDto {
-//   @ApiProperty({
-//     example: 'b24c7d4a-1e2b-43a7-9c8b-123456789abc',
-//     description: 'ID организации',
-//   })
-//   @IsUUID()
-//   organizationId: string;
-//
-//   @ApiProperty({
-//     example: 'MANAGER',
-//     description: 'Роль пользователя внутри организации',
-//   })
-//   @IsString()
-//   role: string;
-//
-//   @ApiProperty({
-//     example: 'Главный бухгалтер',
-//     required: false,
-//   })
-//   @IsOptional()
-//   position?: string;
-//
-//   @ApiProperty({ type: () => CreateUserDto })
-//   @ValidateNested()
-//   @Type(() => CreateUserDto)
-//   user: CreateUserDto;
-// }

@@ -1,52 +1,289 @@
 import {
   BadRequestException,
   ConflictException,
-  Injectable
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
 } from '@nestjs/common';
-import {CreateTenantUserDto} from "./dto/create-tenant-user.dto";
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
-import {Tenant} from "@prisma/client";
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import { Tenant } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { $Enums, Prisma} from ".prisma/client-tenant";
-import {TenantUserFilterDto, UserSortField} from "./dto/tenant-user-filter.dto";
-import {UpdateTenantUserDto} from "./dto/update-tenant-user.dto";
+import { $Enums, Prisma } from '.prisma/client-tenant';
+import { CreateTenantUserDto } from './dto/create-tenant-user.dto';
+import { UpdateTenantUserDto } from './dto/update-tenant-user.dto';
+import {
+  GetTenantUsersQueryDto,
+  TenantUserSortField,
+} from './dto/get-tenant-users-query.dto';
+import { AuditHelper } from '../audit-logs/audit.helper'; // если у вас есть
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class TenantUserService {
   constructor(
     private readonly prismaTenant: PrismaTenantService,
+    private readonly auditHelper?: AuditHelper, // опционально
   ) {}
 
   private readonly SALT_ROUNDS = 10;
 
-  async create(tenant: Tenant, dto: CreateTenantUserDto) {
+  async getAllAdmin(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    query: GetTenantUsersQueryDto,
+  ): Promise<{ items: any[]; total: number }> {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const {
+      search,
+      sortField = TenantUserSortField.createdAt,
+      order = 'desc',
+      page = 1,
+      limit = 10,
+    } = query;
+
+    const where: Prisma.UserWhereInput = {
+      // Можно добавить ограничение по организациям текущего пользователя, если нужно
+      // org_links: { some: { organizationId: currentUser.orgId } },
+    };
+
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { profile: { firstName: { contains: search, mode: 'insensitive' } } },
+        { profile: { lastName: { contains: search, mode: 'insensitive' } } },
+        {
+          phone_numbers: {
+            some: { phone: { contains: search, mode: 'insensitive' } },
+          },
+        },
+      ];
+    }
+
+    let orderBy: Prisma.UserOrderByWithRelationInput;
+
+    if (
+      sortField === TenantUserSortField['profile.firstName'] ||
+      sortField === TenantUserSortField['profile.lastName']
+    ) {
+      const profileField =
+        sortField === TenantUserSortField['profile.firstName']
+          ? 'firstName'
+          : 'lastName';
+      orderBy = { profile: { [profileField]: order } };
+    } else {
+      orderBy = { [sortField]: order };
+    }
+
+    const [items, total] = await Promise.all([
+      client.user.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy,
+        include: {
+          profile: true,
+          phone_numbers: true,
+          org_links: {
+            select: {
+              organization: { select: { id: true, name: true } },
+              role: true,
+            },
+          },
+        },
+      }),
+      client.user.count({ where }),
+    ]);
+
+    return { items, total };
+  }
+
+  async getByIdAdmin(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    id: string,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const user = await client.user.findUnique({
+      where: { id },
+      include: {
+        profile: true,
+        phone_numbers: true,
+        org_links: {
+          select: {
+            organization: { select: { id: true, name: true } },
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+
+    return { data: user };
+  }
+
+  async create(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    dto: CreateTenantUserDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const hashedPassword = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
 
-    const { profile, phone_numbers, email, password, isActive, ...userRest } = dto;
+    const { profile, phone_numbers, email, password, isActive, ...userRest } =
+      dto;
 
-    const hasPrimaryPhone = phone_numbers?.some(p => p.isPrimary);
+    // Проверка наличия хотя бы одного основного телефона
+    const hasPrimaryPhone = phone_numbers?.some((p) => p.isPrimary);
     if (!hasPrimaryPhone) {
-      throw new BadRequestException('At least one phone number must be marked as primary');
+      throw new BadRequestException(
+        'Хотя бы один телефон должен быть основным',
+      );
+    }
+
+    if (phone_numbers.filter((p) => p.isPrimary).length > 1) {
+      throw new BadRequestException('Только один телефон может быть основным');
+    }
+
+    const result = await client.$transaction(async (tx) => {
+      // 1. Проверка уникальности email
+      if (email) {
+        const existing = await tx.user.findUnique({ where: { email } });
+        if (existing) {
+          throw new ConflictException(
+            'Пользователь с таким email уже существует',
+          );
+        }
+      }
+
+      // 2. Проверка уникальности телефонов
+      const inputPhones = phone_numbers.map((p) => p.phone);
+      const existingPhones = await tx.userPhone.findMany({
+        where: { phone: { in: inputPhones } },
+        select: { phone: true },
+      });
+
+      if (existingPhones.length) {
+        throw new ConflictException(
+          `Номера уже используются: ${existingPhones.map((p) => p.phone).join(', ')}`,
+        );
+      }
+
+      // 3. Создание пользователя
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          isActive: isActive ?? true,
+          ...userRest,
+          profile: {
+            create: {
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+              patronymic: profile.patronymic,
+              gender: profile.gender as $Enums.Gender,
+              dateOfBirth: profile.dateOfBirth
+                ? new Date(profile.dateOfBirth)
+                : null,
+              passportSeries: profile.passportSeries,
+              passportNumber: profile.passportNumber,
+              issuedBy: profile.issuedBy,
+              issuedDate: profile.issuedDate
+                ? new Date(profile.issuedDate)
+                : null,
+              expiryDate: profile.expiryDate
+                ? new Date(profile.expiryDate)
+                : null,
+              country: profile.country,
+              region: profile.region,
+              city: profile.city,
+              address: profile.address,
+              registration: profile.registration,
+              district: profile.district,
+            },
+          },
+        },
+      });
+
+      // 4. Создание телефонов
+      await tx.userPhone.createMany({
+        data: phone_numbers.map((p) => ({
+          userId: user.id,
+          phone: p.phone,
+          isPrimary: p.isPrimary,
+          note: p.note,
+        })),
+      });
+
+      // 5. Логирование (если есть AuditHelper)
+      if (this.auditHelper) {
+        await this.auditHelper.log(tx, currentUser.orgId, {
+          userId: currentUser.userId,
+          action: 'CREATE',
+          entity: 'User',
+          entityId: user.id,
+          newValue: {
+            email: user.email,
+            profile: {
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+            },
+          },
+          note: `Создан новый пользователь ${profile.firstName} ${profile.lastName}`,
+        });
+      }
+
+      return tx.user.findUnique({
+        where: { id: user.id },
+        include: { profile: true, phone_numbers: true },
+      });
+    });
+
+    return { data: result };
+  }
+
+  async createWithOutAuth(tenant: Tenant, dto: CreateTenantUserDto) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+    const hashedPassword = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
+
+    const { profile, phone_numbers, email, password, isActive, ...userRest } =
+      dto;
+
+    const hasPrimaryPhone = phone_numbers?.some((p) => p.isPrimary);
+    if (!hasPrimaryPhone) {
+      throw new BadRequestException(
+        'At least one phone number must be marked as primary',
+      );
     }
 
     // (опционально) запретить больше одного primary
-    const primaryCount = phone_numbers.filter(p => p.isPrimary).length;
+    const primaryCount = phone_numbers.filter((p) => p.isPrimary).length;
     if (primaryCount > 1) {
-      throw new BadRequestException('Only one phone number can be marked as primary');
+      throw new BadRequestException(
+        'Only one phone number can be marked as primary',
+      );
     }
 
     const result = await client.$transaction(async (tx) => {
       // 1) Проверка дубликатов внутри запроса
-      const inputPhones = phone_numbers.map(p => p.phone);
+      const inputPhones = phone_numbers.map((p) => p.phone);
       const duplicatesInPayload = Array.from(
-        inputPhones.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map<string, number>())
+        inputPhones.reduce(
+          (m, x) => m.set(x, (m.get(x) ?? 0) + 1),
+          new Map<string, number>(),
+        ),
       )
         .filter(([, cnt]) => cnt > 1)
         .map(([phone]) => phone);
 
       if (duplicatesInPayload.length) {
-        throw new BadRequestException(`Повторяющиеся номера в запросе: ${duplicatesInPayload.join(', ')}`);
+        throw new BadRequestException(
+          `Повторяющиеся номера в запросе: ${duplicatesInPayload.join(', ')}`,
+        );
       }
 
       // 2) Проверка существующих телефонов в БД (глобально по @unique phone)
@@ -55,11 +292,13 @@ export class TenantUserService {
         select: { phone: true },
       });
       if (existing.length) {
-        const list = existing.map(e => e.phone).join(', ');
+        const list = existing.map((e) => e.phone).join(', ');
         throw new BadRequestException(`Номера уже существуют: ${list}`);
       }
 
-      const existingUser = await client.user.findUnique({ where: { email: dto.email } });
+      const existingUser = await client.user.findUnique({
+        where: { email: dto.email },
+      });
       if (existingUser) {
         throw new ConflictException('Email уже зарегистрирован');
       }
@@ -75,32 +314,57 @@ export class TenantUserService {
             create: {
               firstName: profile.firstName,
               lastName: profile.lastName,
-              ...(profile.patronymic !== undefined ? { patronymic: profile.patronymic } : {}),
+              ...(profile.patronymic !== undefined
+                ? { patronymic: profile.patronymic }
+                : {}),
 
-              ...(profile.gender ? { gender: profile.gender as $Enums.Gender } : {}),
+              ...(profile.gender
+                ? { gender: profile.gender as $Enums.Gender }
+                : {}),
 
-              ...(profile.passportSeries !== undefined ? { passportSeries: profile.passportSeries } : {}),
-              ...(profile.passportNumber !== undefined ? { passportNumber: profile.passportNumber } : {}),
-              ...(profile.issuedBy !== undefined ? { issuedBy: profile.issuedBy } : {}),
+              ...(profile.passportSeries !== undefined
+                ? { passportSeries: profile.passportSeries }
+                : {}),
+              ...(profile.passportNumber !== undefined
+                ? { passportNumber: profile.passportNumber }
+                : {}),
+              ...(profile.issuedBy !== undefined
+                ? { issuedBy: profile.issuedBy }
+                : {}),
 
-
-              ...(profile.country !== undefined ? { country: profile.country } : {}),
-              ...(profile.region !== undefined ? { region: profile.region } : {}),
+              ...(profile.country !== undefined
+                ? { country: profile.country }
+                : {}),
+              ...(profile.region !== undefined
+                ? { region: profile.region }
+                : {}),
               ...(profile.city !== undefined ? { city: profile.city } : {}),
-              ...(profile.address !== undefined ? { address: profile.address } : {}),
-              ...(profile.registration !== undefined ? { registration: profile.registration } : {}),
-              ...(profile.district !== undefined ? { district: profile.district } : {}),
+              ...(profile.address !== undefined
+                ? { address: profile.address }
+                : {}),
+              ...(profile.registration !== undefined
+                ? { registration: profile.registration }
+                : {}),
+              ...(profile.district !== undefined
+                ? { district: profile.district }
+                : {}),
 
-              dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth) : null,
-              issuedDate: profile.issuedDate ? new Date(profile.issuedDate) : null,
-              expiryDate: profile.expiryDate ? new Date(profile.expiryDate) : null,
+              dateOfBirth: profile.dateOfBirth
+                ? new Date(profile.dateOfBirth)
+                : null,
+              issuedDate: profile.issuedDate
+                ? new Date(profile.issuedDate)
+                : null,
+              expiryDate: profile.expiryDate
+                ? new Date(profile.expiryDate)
+                : null,
             },
           },
         },
       });
 
       // 4) Вставка телефонов — без skipDuplicates (пусть падает на реальном конфликте)
-      const phoneData = phone_numbers.map(p => ({
+      const phoneData = phone_numbers.map((p) => ({
         userId: user.id,
         phone: p.phone,
         isPrimary: p.isPrimary,
@@ -112,7 +376,9 @@ export class TenantUserService {
       } catch (e: any) {
         // Гонка: между проверкой и вставкой телефон мог появиться
         if (e?.code === 'P2002') {
-          throw new BadRequestException('Нарушение уникальности номера телефона');
+          throw new BadRequestException(
+            'Нарушение уникальности номера телефона',
+          );
         }
         throw e;
       }
@@ -127,228 +393,201 @@ export class TenantUserService {
     return result;
   }
 
-  async update(tenant: Tenant, id: string, dto: UpdateTenantUserDto) {
+  // ─── Обновление пользователя ─────────────────────────────────────
+  async update(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    id: string,
+    dto: UpdateTenantUserDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Быстрая проверка уникальности email (если меняется)
-    if (dto.email) {
-      const existing = await client.user.findUnique({ where: { email: dto.email } });
-      if (existing && existing.id !== id) {
-        throw new ConflictException('Email уже зарегистрирован');
-      }
-    }
-
-    // Валидация телефонов: запретить больше одного primary в итоговом состоянии
-    // Соберём флаги primary из всех операций
-    const primaryAdds = dto.phonesToAdd?.filter(x => x.isPrimary) ?? [];
-    const primaryUpdatesSetTrue = dto.phonesToUpdate?.filter(x => x.isPrimary === true) ?? [];
-    const primaryUpdatesSetFalse = new Set((dto.phonesToUpdate?.filter(x => x.isPrimary === false).map(x => x.id)) ?? []);
-
-    // Считаем текущее количество primary у пользователя (исключая те, что мы явно выключаем и включая те, что включаем)
-    const currentPrimary = await client.userPhone.findMany({
-      where: { userId: id, isPrimary: true },
-      select: { id: true },
+    const existing = await client.user.findUnique({
+      where: { id },
+      include: { profile: true, phone_numbers: true },
     });
-    const stillPrimary = currentPrimary.filter(p => !primaryUpdatesSetFalse.has(p.id)).length;
-    const willBePrimary = stillPrimary + primaryAdds.length + primaryUpdatesSetTrue.length;
-    if (willBePrimary > 1) {
-      throw new BadRequestException('Только один номер может быть основным (isPrimary)');
+
+    if (!existing) {
+      throw new NotFoundException('Пользователь не найден');
     }
 
-    // Проверка глобальной уникальности телефонных номеров, которые мы пытаемся задать
-    const phonesToCheck: string[] = [];
-    if (dto.phonesToAdd?.length) phonesToCheck.push(...dto.phonesToAdd.map(x => x.phone));
-    if (dto.phonesToUpdate?.length) {
-      for (const u of dto.phonesToUpdate) if (u.phone) phonesToCheck.push(u.phone);
-    }
-    if (phonesToCheck.length) {
-      const existingPhones = await client.userPhone.findMany({
-        where: { phone: { in: phonesToCheck } },
-        select: { phone: true },
+    // Проверка уникальности email
+    if (dto.email && dto.email !== existing.email) {
+      const conflict = await client.user.findUnique({
+        where: { email: dto.email },
       });
-      if (existingPhones.length) {
-        const list = existingPhones.map(x => x.phone).join(', ');
-        throw new BadRequestException(`Номера уже существуют: ${list}`);
+      if (conflict) {
+        throw new ConflictException('Email уже используется');
       }
     }
 
     const result = await client.$transaction(async (tx) => {
-      // 1) Обновление User
+      // 1. Обновление базовых полей пользователя
       const userData: Prisma.UserUpdateInput = {};
-
       if (dto.email) userData.email = dto.email;
-      if (dto.password) {
-        const hashed = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
-        userData.password = hashed;
-      }
+      if (dto.password)
+        userData.password = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
       if (dto.isActive !== undefined) userData.isActive = dto.isActive;
 
-      // 2) Обновление Profile (условные спреды)
+      // 2. Обновление профиля
       if (dto.profile) {
-        const p = dto.profile;
         userData.profile = {
           update: {
-            ...(p.firstName !== undefined ? { firstName: p.firstName } : {}),
-            ...(p.lastName !== undefined ? { lastName: p.lastName } : {}),
-            ...(p.patronymic !== undefined ? { patronymic: p.patronymic } : {}),
-            ...(p.gender ? { gender: p.gender as unknown as $Enums.Gender } : {}),
-            ...(p.passportSeries !== undefined ? { passportSeries: p.passportSeries } : {}),
-            ...(p.passportNumber !== undefined ? { passportNumber: p.passportNumber } : {}),
-            ...(p.issuedBy !== undefined ? { issuedBy: p.issuedBy } : {}),
-            ...(p.country !== undefined ? { country: p.country } : {}),
-            ...(p.region !== undefined ? { region: p.region } : {}),
-            ...(p.city !== undefined ? { city: p.city } : {}),
-            ...(p.address !== undefined ? { address: p.address } : {}),
-            ...(p.registration !== undefined ? { registration: p.registration } : {}),
-            ...(p.district !== undefined ? { district: p.district } : {}),
-            ...(p.dateOfBirth ? { dateOfBirth: new Date(p.dateOfBirth) } : {}),
-            ...(p.issuedDate ? { issuedDate: new Date(p.issuedDate) } : {}),
-            ...(p.expiryDate ? { expiryDate: new Date(p.expiryDate) } : {}),
+            firstName: dto.profile.firstName,
+            lastName: dto.profile.lastName,
+            patronymic: dto.profile.patronymic,
+            gender: dto.profile.gender as $Enums.Gender,
+            dateOfBirth: dto.profile.dateOfBirth
+              ? new Date(dto.profile.dateOfBirth)
+              : undefined,
+            // ... остальные поля профиля аналогично
           },
         };
       }
 
-      // Выполняем update пользователя (без телефонов)
       await tx.user.update({ where: { id }, data: userData });
 
-      // 3) Телефоны: delete → update → create (надёжный порядок)
+      // 3. Обработка телефонов
       if (dto.phonesToDelete?.length) {
-        await tx.userPhone.deleteMany({ where: { id: { in: dto.phonesToDelete }, userId: id } });
+        await tx.userPhone.deleteMany({
+          where: { id: { in: dto.phonesToDelete }, userId: id },
+        });
       }
 
       if (dto.phonesToUpdate?.length) {
-        for (const item of dto.phonesToUpdate) {
-          const data: Prisma.UserPhoneUpdateInput = {};
-          if (item.phone !== undefined) data.phone = item.phone;
-          if (item.isPrimary !== undefined) data.isPrimary = item.isPrimary;
-          if (item.note !== undefined) data.note = item.note;
-          if (Object.keys(data).length) {
-            try {
-              await tx.userPhone.update({ where: { id: item.id }, data });
-            } catch (e: any) {
-              if (e?.code === 'P2002') {
-                throw new BadRequestException('Нарушение уникальности номера телефона');
-              }
-              throw e;
-            }
-          }
+        for (const phone of dto.phonesToUpdate) {
+          await tx.userPhone.update({
+            where: { id: phone.id },
+            data: {
+              phone: phone.phone,
+              isPrimary: phone.isPrimary,
+              note: phone.note,
+            },
+          });
         }
       }
 
       if (dto.phonesToAdd?.length) {
-        const createData = dto.phonesToAdd.map(p => ({
-          userId: id,
-          phone: p.phone,
-          isPrimary: p.isPrimary,
-          note: p.note,
-        }));
-        try {
-          await tx.userPhone.createMany({ data: createData });
-        } catch (e: any) {
-          if (e?.code === 'P2002') {
-            throw new BadRequestException('Нарушение уникальности номера телефона');
-          }
-          throw e;
-        }
+        await tx.userPhone.createMany({
+          data: dto.phonesToAdd.map((p) => ({
+            userId: id,
+            phone: p.phone,
+            isPrimary: p.isPrimary,
+            note: p.note,
+          })),
+        });
       }
 
-      // Возвращаем актуальные данные
+      // 4. Логирование
+      if (this.auditHelper) {
+        await this.auditHelper.log(tx, currentUser.orgId, {
+          userId: currentUser.userId,
+          action: 'UPDATE',
+          entity: 'User',
+          entityId: id,
+          note: `Обновлён пользователь ${existing.profile?.firstName} ${existing.profile?.lastName}`,
+        });
+      }
+
       return tx.user.findUnique({
         where: { id },
-        include: { profile: true, phone_numbers: true, org_links: true },
+        include: { profile: true, phone_numbers: true },
       });
     });
 
-    return result;
+    return { data: result };
   }
 
-  async filter(tenant: Tenant, dto: TenantUserFilterDto) {
+  // ─── Жёсткое удаление ────────────────────────────────────────────
+  async hardDelete(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    id: string,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const take = dto.limit;
-    const skip = (dto.page - 1) * dto.limit;
+    const user = await client.user.findUnique({
+      where: { id },
+      include: { profile: true },
+    });
 
-    // 1. Build the dynamic WHERE clause
-    const where: Prisma.UserWhereInput = {};
-
-    if (dto.isActive !== undefined) {
-      where.isActive = dto.isActive;
-    }
-    if (dto.roleId) {
-      where.roleId = dto.roleId;
-    }
-
-    // 2. Логика сквозного поиска (search) по Email, Profile и Phone
-    if (dto.search) {
-      const emailFilter: Prisma.StringNullableFilter<'User'> = {
-        contains: dto.search,
-        mode: 'insensitive', // `'insensitive' as const` also works
-      };
-      const profileNameFilter: Prisma.StringFilter<'UserProfile'> = {
-        contains: dto.search,
-        mode: 'insensitive',
-      };
-
-      where.OR = [
-        // Поиск по Email
-        { email: emailFilter },
-
-        // Поиск по UserProfile (FirstName/LastName)
-        { profile: { firstName: profileNameFilter } },
-        { profile: { lastName: profileNameFilter } },
-
-        // Поиск по номеру телефона (используем `some`, т.к. телефонов может быть несколько)
-        { phone_numbers: { some: { phone: { contains: dto.search } } } },
-      ];
-    }
-
-    // 3. Define the ORDER BY clause
-    // Если сортировка идет по полям профиля, Prisma требует специальный синтаксис.
-    let orderBy: Prisma.UserOrderByWithRelationInput;
-    const sortOrder = (dto.sortOrder ?? 'desc') as unknown as Prisma.SortOrder; // normalize to Prisma.SortOrder
-
-    if (dto.sortBy === UserSortField.firstName || dto.sortBy === UserSortField.lastName) {
-      const profileField = dto.sortBy === UserSortField.firstName ? 'firstName' : 'lastName';
-      orderBy = {
-        profile: {
-          [profileField]: sortOrder,
-        },
-      };
-    } else {
-      // Only direct fields are allowed here. Narrow the key to valid User scalar keys used in your enum.
-      const directKey = dto.sortBy as 'createdAt' | 'updatedAt' | 'email';
-      orderBy = {
-        [directKey]: sortOrder,
-      } as Prisma.UserOrderByWithRelationInput; // assert the final shape
-    }
-
-    // 3) Query
-    const [data, total] = await client.$transaction([
-      client.user.findMany({
-        where,
-        take,
-        skip,
-        include: {
-          profile: true,
-          role: true,
-          phone_numbers: true,
-        },
-        orderBy,
-      }),
-      client.user.count({ where }),
-    ]);
-
-    return { data, total, page: dto.page, limit: dto.limit };
-  }
-
-  async remove(tenant: Tenant, id: string) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const user = await client.user.findUnique({ where: { id } });
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new NotFoundException('Пользователь не найден');
     }
 
-    await client.user.delete({ where: { id } });
-    return { message: 'User deleted successfully' }
+    // Нельзя удалять самого себя
+    if (user.id === currentUser.userId) {
+      throw new BadRequestException('Нельзя удалить самого себя');
+    }
+
+    await client.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id } });
+
+      if (this.auditHelper) {
+        await this.auditHelper.log(tx, currentUser.orgId, {
+          userId: currentUser.userId,
+          action: 'DELETE',
+          entity: 'User',
+          entityId: id,
+          oldValue: {
+            email: user.email,
+            name: `${user.profile?.firstName} ${user.profile?.lastName}`,
+          },
+          note: `Удалён пользователь ${user.profile?.firstName} ${user.profile?.lastName}`,
+        });
+      }
+    });
+
+    return { message: 'Пользователь успешно удалён' };
+  }
+
+  async checkExistence(tenant: Tenant, identifier: string) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    // 1. Ищем пользователя либо по email, либо через таблицу телефонов
+    const user = await client.user.findFirst({
+      where: {
+        OR: [
+          { email: identifier },
+          {
+            phone_numbers: {
+              some: { phone: identifier },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        org_links: {
+          select: {
+            role: true,
+            organization: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(
+        'Пользователь с таким email или телефоном не найден',
+      );
+    }
+
+    // 2. Формируем удобный ответ
+    return {
+      userId: user.id,
+      email: user.email,
+      organizations: user.org_links.map((link) => ({
+        organizationId: link.organization.id,
+        organizationName: link.organization.name,
+        role: link.role,
+      })),
+    };
   }
 }

@@ -2,185 +2,66 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import { JwtAuthenticatedUser } from 'src/tenant-auth/interfaces/jwt.interface';
 import { Tenant } from '@prisma/client';
 import { OrgUserRole, Prisma } from '.prisma/client-tenant';
+import { CreateTenantUserDto } from 'src/tenant-user/dto/create-tenant-user.dto';
 import { CreateOrganizationUserDto } from './dto/create-org-user.dto';
-import { OrgUserFilterDto } from './dto/org-user-filter.dto';
-import { TenantUserService } from '../tenant-user/tenant-user.service';
-import { CreateTenantUserDto } from '../tenant-user/dto/create-tenant-user.dto';
-import { CreateOrgUserWithUserDto } from './dto/create-org_user-with-user.dto';
+import { PrismaTenantService } from 'src/prisma_tenant/prisma_tenant.service';
+import { TenantUserService } from 'src/tenant-user/tenant-user.service';
+import { AuditHelper } from 'src/audit-logs/audit.helper';
+import { GetOrgUsersQueryDto } from './dto/get-org-users-query.dto';
+import { UpdateOrganizationUserDto } from './dto/update-organization-user.dto';
 
+// organization-user.service.ts
 @Injectable()
 export class OrganizationUserService {
   constructor(
     private readonly prismaTenant: PrismaTenantService,
     private readonly tenantUserService: TenantUserService,
+    private readonly auditHelper: AuditHelper,
   ) {}
 
-  async create(tenant: Tenant, dto: CreateOrganizationUserDto) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    return client.organizationUser.create({
-      data: {
-        ...dto,
-      },
-    });
-  }
-
-  async createWithUser(dto: CreateOrgUserWithUserDto, tenant: Tenant) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-
-    const organization = await client.organization.findUnique({
-      where: { id: dto.organizationId },
-    });
-
-    if (!organization) {
-      throw new NotFoundException('Organization not found');
-    }
-
-    if (dto.user.email) {
-      const existingUserEmail = await client.user.findUnique({
-        where: { email: dto.user.email },
-      });
-
-      if (existingUserEmail) {
-        throw new ConflictException('User with this email already exists');
-      }
-    }
-
-    if (dto.user.phone_numbers?.length) {
-      for (const phone of dto.user.phone_numbers) {
-        const existingPhone = await client.userPhone.findUnique({
-          where: { phone: phone.phone },
-        });
-
-        if (existingPhone) {
-          throw new ConflictException(
-            `Phone number ${phone.phone} already exists`,
-          );
-        }
-      }
-    }
-
-    const createdUser = await this.tenantUserService.create(tenant, dto.user);
-
-    if (!createdUser) {
-      throw new InternalServerErrorException('Failed to create user');
-    }
-
-    // const existingOrgUser = await client.organizationUser.findUnique({
-    //   where: {
-    //     organizationId_userId: {
-    //       organizationId: dto.organizationId,
-    //       userId: createdUser.id,
-    //     },
-    //   },
-    // });
-    //
-    // if (existingOrgUser) {
-    //   throw new ConflictException(
-    //     "This user already assigned to this organization"
-    //   );
-    // }
-
-    return client.organizationUser.create({
-      data: {
-        organizationId: dto.organizationId,
-        role: dto.role,
-        position: dto.position,
-        userId: createdUser.id,
-      },
-    });
-  }
-
-  async createWithTenantUser(
+  // ─── Универсальный метод для админки ─────────────────────────────
+  async getAllAdmin(
     tenant: Tenant,
-    organizationId: string,
-    role: OrgUserRole,
-    position: string | undefined,
-    createTenantUserDto: CreateTenantUserDto,
-  ) {
-    try {
-      // создаём пользователя в tenant DB
-      const user = await this.tenantUserService.create(
-        tenant,
-        createTenantUserDto,
-      );
-      if (!user) {
-        throw new Error('User creation failed — no user returned');
-      }
-
-      if (!role) throw new BadRequestException('Role is required');
-
-      // собираем DTO для organizationUser
-      const orgUser: CreateOrganizationUserDto = {
-        organizationId,
-        userId: user.id,
-        role,
-        ...(position ? { position } : {}),
-      };
-
-      // создаём запись organizationUser
-      await this.create(tenant, orgUser);
-
-      return user;
-    } catch (e) {
-      console.error(e);
-      throw new Error('Error creating user with organization relation');
-    }
-  }
-
-  async filter(tenant: Tenant, dto: OrgUserFilterDto) {
+    currentUser: JwtAuthenticatedUser,
+    query: GetOrgUsersQueryDto,
+  ): Promise<{ items: any[]; total: number }> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const take = dto.limit; // dto.limit - сколько элементов на странице
-    const skip = (dto.page - 1) * dto.limit;
+    const { search, sortField, order, page = 1, limit = 10 } = query;
 
-    const where: Prisma.OrganizationUserWhereInput = {};
+    const where: Prisma.OrganizationUserWhereInput = {
+      organizationId: currentUser.orgId, // ← ТОЛЬКО своя организация!
+    };
 
-    if (dto.organizationId) {
-      where.organizationId = dto.organizationId;
-    }
-
-    if (dto.role) {
-      where.role = dto.role;
-    }
-
-    if (dto.search) {
-      // Пример поиска по имени пользователя или позиции
+    if (search) {
       where.OR = [
+        { position: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
         {
           user: {
-            profile: {
-              firstName: { contains: dto.search, mode: 'insensitive' },
-            },
+            profile: { firstName: { contains: search, mode: 'insensitive' } },
           },
         },
         {
           user: {
-            profile: {
-              lastName: { contains: dto.search, mode: 'insensitive' },
-            },
+            profile: { lastName: { contains: search, mode: 'insensitive' } },
           },
         },
-        { position: { contains: dto.search, mode: 'insensitive' } },
       ];
     }
 
-    const orderByField = dto.sortBy || 'createdAt';
-    const orderDirection = dto.sortOrder || 'desc';
-
-    // @ts-ignore
-    const [data, total] = await client.$transaction([
+    const [items, total] = await Promise.all([
       client.organizationUser.findMany({
         where,
-        take,
-        skip,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { [sortField as string]: order },
         include: {
-          organization: true,
           user: {
             select: {
               id: true,
@@ -190,90 +71,256 @@ export class OrganizationUserService {
                 select: {
                   firstName: true,
                   lastName: true,
+                  patronymic: true,
                   gender: true,
+                  dateOfBirth: true,
                 },
               },
-              phone_numbers: true,
+              phone_numbers: {
+                select: { phone: true, isPrimary: true, note: true },
+              },
             },
           },
         },
-        orderBy: {
-          [orderByField]: orderDirection,
-        },
       }),
-      client.organizationUser.count({
-        where,
-      }),
+      client.organizationUser.count({ where }),
     ]);
 
-    return {
-      data,
-      total,
-      page: dto.page,
-      limit: dto.limit,
-      totalPages: Math.ceil(total / dto.limit),
-    };
+    return { items, total };
   }
 
-  // async update(
-  //   tenant: Tenant,
-  //   id: string,
-  //   updateDto: UpdateOrganizationUserDto,
-  // ) {
-  //   const existing = await this.prismaTenant[tenant.dbName].organizationUser.findUnique({
-  //     where: {id},
-  //   });
-  //
-  //   if (!existing) {
-  //     throw new NotFoundException(`OrganizationUser with id ${id} not found`);
-  //   }
-  //
-  //   return this.prismaTenant[tenant.dbName].organizationUser.update({
-  //     where: {id},
-  //     data: {
-  //       ...(updateDto.role ? {role: updateDto.role} : {}),
-  //       ...(updateDto.position ? {position: updateDto.position} : {}),
-  //     },
-  //     include: {
-  //       organization: true,
-  //       user: {
-  //         include: {
-  //           profile: true,
-  //           phone_numbers: true,
-  //         },
-  //       },
-  //     },
-  //   });
-  // }
-
-  async delete(tenant: Tenant, id: string, performedByUserId?: string) {
+  // ─── Получение одной записи ──────────────────────────────────────
+  async getByIdAdmin(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    id: string,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const existingUser = await client.organizationUser.findUnique({
-      where: { id },
+
+    const orgUser = await client.organizationUser.findFirst({
+      where: {
+        id,
+        organizationId: currentUser.orgId, // ← безопасность
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            isActive: true,
+            profile: true,
+            phone_numbers: true,
+          },
+        },
+      },
     });
 
-    if (!existingUser) {
-      throw new NotFoundException(`Organization user with ID ${id} not found`);
+    if (!orgUser) {
+      throw new NotFoundException('Пользователь в организации не найден');
+    }
+
+    return { data: orgUser };
+  }
+
+  // ─── Создание привязки существующего пользователя ────────────────
+  async create(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    dto: CreateOrganizationUserDto,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const existing = await client.organizationUser.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: currentUser.orgId,
+          userId: dto.userId,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        'Пользователь уже привязан к этой организации',
+      );
+    }
+
+    const result = await client.$transaction(async (tx) => {
+      const created = await tx.organizationUser.create({
+        data: { organizationId: currentUser.orgId, ...dto },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      });
+
+      await this.auditHelper.log(tx, currentUser.orgId, {
+        action: 'CREATE',
+        entity: 'OrganizationUser',
+        entityId: created.id,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        newValue: created as any,
+      });
+
+      return created;
+    });
+
+    return { data: result };
+  }
+
+  // ─── Обновление ──────────────────────────────────────────────────
+  async update(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    id: string,
+    dto: UpdateOrganizationUserDto,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const existing = await client.organizationUser.findFirst({
+      where: {
+        id,
+        organizationId: currentUser.orgId,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Запись не найдена или недоступна');
+    }
+
+    const result = await client.$transaction(async (tx) => {
+      const updated = await tx.organizationUser.update({
+        where: { id },
+        data: dto,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: true,
+            },
+          },
+        },
+      });
+
+      await this.auditHelper.log(tx, currentUser.orgId, {
+        action: 'UPDATE',
+        entity: 'OrganizationUser',
+        entityId: updated.id,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        newValue: updated as any,
+      });
+    });
+
+    return { data: result };
+  }
+
+  // ─── Жёсткое удаление ────────────────────────────────────────────
+  async hardDelete(
+    tenant: Tenant,
+    currentUser: JwtAuthenticatedUser,
+    id: string,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const existing = await client.organizationUser.findFirst({
+      where: {
+        id,
+        organizationId: currentUser.orgId,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Запись не найдена');
+    }
+
+    if (existing.userId === currentUser.userId) {
+      throw new BadRequestException(
+        'Нельзя удалить самого себя из организации',
+      );
     }
 
     await client.$transaction(async (tx) => {
-      await tx.organizationUser.delete({
-        where: { id },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          organizationId: existingUser.organizationId,
-          userId: performedByUserId ?? null,
-          action: 'DELETE',
-          entity: 'OrganizationUser',
-          entityId: id,
-          oldValue: existingUser,
-          newValue: undefined,
-          note: `Organization user deleted by user ${performedByUserId || 'system'}`,
-        },
+      const deleted = await client.organizationUser.delete({ where: { id } });
+      await this.auditHelper.log(tx, currentUser.orgId, {
+        action: 'DELETE',
+        entity: 'OrganizationUser',
+        entityId: deleted.id,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        newValue: deleted as any,
       });
     });
-    return { message: 'Organization user deleted successfully' };
+
+    return { message: 'Пользователь успешно удалён из организации' };
+  }
+
+  // TODO нужно проверить работаетли корректно с tenant.serivce.ts
+  async createWithTenantUser(
+    tenant: Tenant,
+    organizationId: string,
+    role: OrgUserRole,
+    position: string | undefined,
+    createTenantUserDto: CreateTenantUserDto,
+  ) {
+    try {
+      // создаём пользователя в tenant DB
+      const user = await this.tenantUserService.createWithOutAuth(
+        tenant,
+
+        createTenantUserDto,
+      );
+      if (!user) {
+        throw new Error('User creation failed — no user returned');
+      }
+
+      if (!role) throw new BadRequestException('Role is required');
+
+      // собираем DTO для organizationUser
+      const orgUser: {
+        organizationId: string;
+        userId: string;
+        role: OrgUserRole;
+        position?: string;
+      } = {
+        organizationId,
+        userId: user.id,
+        role,
+        ...(position ? { position } : {}),
+      };
+
+      const client = this.prismaTenant.getTenantPrismaClient(tenant);
+      const result = await client.$transaction(async (tx) => {
+        const created = await tx.organizationUser.create({
+          data: orgUser,
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                profile: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
+        });
+
+        await this.auditHelper.log(tx, created.organizationId, {
+          action: 'CREATE',
+          entity: 'OrganizationUser',
+          entityId: created.id,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          newValue: created as any,
+        });
+      });
+
+      return user;
+    } catch (e) {
+      console.error(e);
+      throw new Error('Error creating user with organization relation');
+    }
   }
 }

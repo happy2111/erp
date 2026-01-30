@@ -216,6 +216,7 @@ model OrganizationUser {
   createdAt DateTime @default(now()) @map("created_at") /* Дата добавления связи, пример: "2025-11-02T12:00:00Z" */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего изменения данных связи */
 
+  @@unique([organizationId, userId]) /* Один пользователь не может иметь несколько записей для одной организации */
   @@map("organization_users")
 }
 
