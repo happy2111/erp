@@ -3,83 +3,115 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
+  ApiQuery,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
-
-import { CreateProductPriceDto } from './dto/create-product-price.dto';
-import { UpdateProductPriceDto } from './dto/update-product-price.dto';
-import { ProductPriceFilterDto } from './dto/filter-product-price.dto';
-
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
-import { OrgUserRole } from '.prisma/client-tenant';
+import { CustomerType, OrgUserRole, PriceType } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
-import {ProductPricesService} from "./product-price.service";
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
-@ApiTags('Product Prices')
+import { ProductPricesService } from './product-price.service';
+import { CreateProductPriceDto } from './dto/create-product-price.dto';
+import { UpdateProductPriceDto } from './dto/update-product-price.dto';
+import { GetProductPriceQueryDto } from './dto/get-product-price-query.dto';
+
+@ApiTags('product-prices')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('product-prices')
 export class ProductPricesController {
-  constructor(private readonly pricesService: ProductPricesService) {}
+  constructor(private readonly service: ProductPricesService) {}
+
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех цен товаров (админ-панель)' })
+  @ApiQuery({ name: 'productId', required: false })
+  @ApiQuery({ name: 'priceType', required: false, enum: PriceType })
+  @ApiQuery({ name: 'customerType', required: false, enum: CustomerType })
+  @ApiQuery({ name: 'sortField', required: false, example: 'createdAt' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetProductPriceQueryDto,
+  ) {
+    return this.service.getAllAdmin(tenant, user.orgId, query);
+  }
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Создать цену для товара' })
-  @ApiResponse({ status: 201, description: 'Цена успешно создана' })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateProductPriceDto) {
-    return this.pricesService.create(tenant, dto);
-  }
-
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить список цен (фильтрация + пагинация)' })
-  findAll(
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Создать новую цену для товара' })
+  async create(
     @CurrentTenant() tenant: Tenant,
-    @Body() filter: ProductPriceFilterDto,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateProductPriceDto,
   ) {
-    return this.pricesService.findAll(tenant, filter);
-  }
-
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить цену по ID' })
-  @ApiParam({ name: 'id', description: 'ID цены' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.pricesService.findOne(tenant, id);
+    const price = await this.service.create(tenant, user.orgId, dto);
+    return { data: price };
   }
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Обновить цену' })
-  update(
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Обновить цену товара' })
+  @ApiParam({ name: 'id' })
+  async update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateProductPriceDto,
   ) {
-    return this.pricesService.update(tenant, id, dto);
+    const updated = await this.service.update(tenant, user.orgId, id, dto);
+    return { data: updated };
   }
 
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Удалить цену' })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.pricesService.remove(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Жёсткое удаление цены' })
+  @ApiParam({ name: 'id' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.service.hardDelete(tenant, user.orgId, id);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить одну цену по ID' })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const price = await this.service.getByIdAdmin(tenant, user.orgId, id);
+    return { data: price };
   }
 }

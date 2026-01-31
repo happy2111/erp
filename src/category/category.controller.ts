@@ -3,84 +3,115 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
-  UseGuards
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
+  ApiQuery,
   ApiSecurity,
-  ApiTags
+  ApiTags,
 } from '@nestjs/swagger';
-import { CategoriesService } from './category.service';
-import { CreateCategoryDto } from './dto/create-category.dto';
-import { UpdateCategoryDto } from './dto/update-category.dto';
-import { CategoryFilterDto } from './dto/filter-category.dto';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
-@ApiTags('Categories')
+import { CategoriesService } from './category.service';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+import { GetCategoryQueryDto } from './dto/get-category-query.dto';
+
+@ApiTags('categories')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('categories')
 export class CategoriesController {
-  constructor(private readonly categoriesService: CategoriesService) {}
+  constructor(private readonly service: CategoriesService) {}
+
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех категорий (админ-панель)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'name' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetCategoryQueryDto,
+  ) {
+    return this.service.getAllAdmin(tenant, user, query);
+  }
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({ summary: 'Создать новую категорию' })
-  @ApiResponse({ status: 201, description: 'Категория успешно создана' })
-  @ApiResponse({ status: 409, description: 'Категория с таким именем уже существует' })
-  async create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateCategoryDto) {
-    return this.categoriesService.create(tenant, dto);
-  }
-
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить список категорий с фильтрацией и пагинацией' })
-  @ApiResponse({ status: 200, description: 'Список категорий успешно получен' })
-  async filter(@CurrentTenant() tenant: Tenant, @Body() dto: CategoryFilterDto) {
-    return this.categoriesService.findAll(tenant, dto);
-  }
-
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить категорию по ID' })
-  @ApiParam({ name: 'id', description: 'ID категории' })
-  @ApiResponse({ status: 200, description: 'Категория успешно найдена' })
-  @ApiResponse({ status: 404, description: 'Категория не найдена' })
-  async findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.categoriesService.findOne(tenant, id);
+  async create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateCategoryDto,
+  ) {
+    const category = await this.service.create(tenant, user, dto);
+    return { data: category };
   }
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Обновить категорию по ID' })
-  @ApiParam({ name: 'id', description: 'ID категории' })
-  @ApiResponse({ status: 200, description: 'Категория успешно обновлена' })
-  @ApiResponse({ status: 404, description: 'Категория не найдена' })
-  async update(@CurrentTenant() tenant: Tenant, @Param('id') id: string, @Body() dto: UpdateCategoryDto) {
-    return this.categoriesService.update(tenant, id, dto);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Обновить категорию' })
+  @ApiParam({ name: 'id' })
+  async update(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    const updated = await this.service.update(tenant, user, id, dto);
+    return { data: updated };
   }
 
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Удалить категорию по ID' })
-  @ApiParam({ name: 'id', description: 'ID категории' })
-  @ApiResponse({ status: 200, description: 'Категория успешно удалена' })
-  @ApiResponse({ status: 404, description: 'Категория не найдена' })
-  async remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.categoriesService.remove(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({
+    summary: 'Жёсткое удаление категории (только если нет связанных товаров)',
+  })
+  @ApiParam({ name: 'id' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.service.hardDelete(tenant, user, id);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить одну категорию по ID (с товарами)' })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const category = await this.service.getByIdAdmin(tenant, user, id);
+    return { data: category };
   }
 }

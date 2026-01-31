@@ -1,70 +1,120 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Param,
+  Controller,
   Delete,
-  Put,
-  UseGuards, Query,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ApiKeyGuard } from '../../guards/api-key.guard';
+import { JwtAuthGuard } from '../../tenant-auth/guards/jwt.guard';
+import { TenantRolesGuard } from '../../guards/tenant-roles.guard';
+import { Roles } from '../../decorators/tenant-roles.decorator';
+import { OrgUserRole } from '.prisma/client-tenant';
+import { CurrentTenant } from '../../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../../tenant-auth/decorators/current-tenant-user.decorator';
+import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../../tenant-auth/interfaces/jwt.interface';
+
 import { AttributeService } from './attribute.service';
 import { CreateAttributeDto } from './dto/create-attribute.dto';
 import { UpdateAttributeDto } from './dto/update-attribute.dto';
-import { FilterAttributeDto } from './dto/filter-attribute.dto';
-import type { Tenant } from '@prisma/client';
-import {CurrentTenant} from "../../decorators/currectTenant.decorator";
-import {JwtAuthGuard} from "../../tenant-auth/guards/jwt.guard";
-import {TenantRolesGuard} from "../../guards/tenant-roles.guard";
-import {ApiKeyGuard} from "../../guards/api-key.guard";
-import {Roles} from "../../decorators/tenant-roles.decorator";
-import {OrgUserRole} from ".prisma/client-tenant";
+import { GetAttributeQueryDto } from './dto/get-attribute-query.dto';
 
-@ApiTags('Attributes')
+@ApiTags('attributes')
+@ApiSecurity('x-tenant-key')
+@ApiBearerAuth()
 @Controller('attributes')
 export class AttributeController {
-  constructor(private readonly attributeService: AttributeService) {}
+  constructor(private readonly service: AttributeService) {}
+
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех характеристик (админ-панель)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'name' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetAttributeQueryDto,
+  ) {
+    return this.service.getAllAdmin(tenant, user, query);
+  }
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.OWNER, OrgUserRole.ADMIN, OrgUserRole.MANAGER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({ summary: 'Создать новую характеристику' })
-  @ApiResponse({ status: 201, description: 'Характеристика успешно создана' })
-  @ApiResponse({ status: 409, description: 'Attribute with this name or key already exists.'})
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateAttributeDto) {
-    return this.attributeService.create(tenant, dto);
+  async create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateAttributeDto,
+  ) {
+    const attribute = await this.service.create(tenant, user, dto);
+    return { data: attribute };
   }
 
-  @Get('filter')
+  @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.OWNER, OrgUserRole.ADMIN, OrgUserRole.MANAGER)
-  @ApiOperation({ summary: 'Получить список характеристик' })
-  findAll(@CurrentTenant() tenant: Tenant, @Query() filter: FilterAttributeDto) {
-    return this.attributeService.findAll(tenant, filter);
-  }
-
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.OWNER, OrgUserRole.ADMIN, OrgUserRole.MANAGER)
-  @ApiOperation({ summary: 'Получить характеристику по ID' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.attributeService.findOne(tenant, id);
-  }
-
-  @Put('update/:id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.OWNER, OrgUserRole.ADMIN, OrgUserRole.MANAGER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({ summary: 'Обновить характеристику' })
-  update(@CurrentTenant() tenant: Tenant, @Param('id') id: string, @Body() dto: UpdateAttributeDto) {
-    return this.attributeService.update(tenant, id, dto);
+  @ApiParam({ name: 'id' })
+  async update(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateAttributeDto,
+  ) {
+    const updated = await this.service.update(tenant, user, id, dto);
+    return { data: updated };
   }
 
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.OWNER, OrgUserRole.ADMIN, OrgUserRole.MANAGER)
-  @ApiOperation({ summary: 'Удалить характеристику' })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.attributeService.remove(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({
+    summary:
+      'Жёсткое удаление характеристики (только если нет связанных значений)',
+  })
+  @ApiParam({ name: 'id' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.service.hardDelete(tenant, user, id);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Получить одну характеристику по ID (с значениями)',
+  })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const attribute = await this.service.getByIdAdmin(tenant, user, id);
+    return { data: attribute };
   }
 }

@@ -1,69 +1,187 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
+import { Tenant } from '@prisma/client';
+import { Prisma } from '.prisma/client-tenant';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
-import { Tenant } from "@prisma/client";
-import {PrismaTenantService} from "../prisma_tenant/prisma_tenant.service";
+import { GetProductCategoryQueryDto } from './dto/get-product-category-query.dto';
 
 @Injectable()
 export class ProductCategoryService {
   constructor(private readonly prismaTenant: PrismaTenantService) {}
 
-  async create(tenant: Tenant, dto: CreateProductCategoryDto) {
+  async getAllAdmin(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    query: GetProductCategoryQueryDto,
+  ): Promise<{ items: any[]; total: number }> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Проверяем уникальность пары
-    const exists = await client.productCategory.findFirst({
-      where: {
-        productId: dto.productId,
-        categoryId: dto.categoryId,
-      },
-    });
+    const {
+      productId,
+      categoryId,
+      search,
+      sortField = 'createdAt',
+      order = 'desc',
+      page = 1,
+      limit = 50,
+    } = query;
 
-    if (exists) {
-      throw new ConflictException('Этот товар уже находится в этой категории');
+    const where: Prisma.ProductCategoryWhereInput = {};
+
+    if (productId) where.productId = productId;
+    if (categoryId) where.categoryId = categoryId;
+
+    if (search) {
+      where.category = {
+        name: { contains: search, mode: 'insensitive' },
+      };
     }
 
-    return client.productCategory.create({ data: dto });
-  }
+    // В будущем здесь можно добавить:
+    // where.product: { organizationId: user.orgId }
 
-  async findAllByProduct(tenant: Tenant, productId: string) {
+    const [items, total] = await Promise.all([
+      client.productCategory.findMany({
+        where,
+        include: {
+          product: { select: { id: true, name: true } },
+          category: { select: { id: true, name: true } },
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { [sortField]: order },
+      }),
+      client.productCategory.count({ where }),
+    ]);
+
+    return { items, total };
+  }
+  //
+  // async getByIdAdmin(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
+  //   const client = this.prismaTenant.getTenantPrismaClient(tenant);
+  //
+  //   const link = await client.productCategory.findUnique({
+  //     where: { productId: id },
+  //     include: {
+  //       product: { select: { id: true, name: true } },
+  //       category: { select: { id: true, name: true } },
+  //     },
+  //   });
+  //
+  //   if (!link) {
+  //     throw new NotFoundException('Связь товар-категория не найдена');
+  //   }
+  //
+  //   return link;
+  // }
+
+  async create(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: CreateProductCategoryDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    return client.productCategory.findMany({
-      where: { productId },
-      include: { category: true },
-    });
-  }
+    // Проверка существования товара и категории (желательно)
+    const [productExists, categoryExists] = await Promise.all([
+      client.product.findUnique({ where: { id: dto.productId } }),
+      client.category.findUnique({ where: { id: dto.categoryId } }),
+    ]);
 
-  async findAllByCategory(tenant: Tenant, categoryId: string) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-
-    return client.productCategory.findMany({
-      where: { categoryId },
-      include: { product: true },
-    });
-  }
-
-  async delete(tenant: Tenant, dto: CreateProductCategoryDto) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-
-    const exists = await client.productCategory.findFirst({
-      where: {
-        productId: dto.productId,
-        categoryId: dto.categoryId,
-      },
-    });
-
-    if (!exists) {
-      throw new NotFoundException('Связь product-category не найдена');
+    if (!productExists) {
+      throw new NotFoundException(`Товар ${dto.productId} не найден`);
+    }
+    if (!categoryExists) {
+      throw new NotFoundException(`Категория ${dto.categoryId} не найдена`);
     }
 
-    return client.productCategory.delete({
+    const exists = await client.productCategory.findUnique({
       where: {
         productId_categoryId: {
           productId: dto.productId,
           categoryId: dto.categoryId,
         },
       },
+    });
+
+    if (exists) {
+      throw new ConflictException('Товар уже находится в этой категории');
+    }
+
+    return client.productCategory.create({
+      data: {
+        productId: dto.productId,
+        categoryId: dto.categoryId,
+      },
+    });
+  }
+
+  async remove(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: CreateProductCategoryDto,
+  ): Promise<void> {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const exists = await client.productCategory.findUnique({
+      where: {
+        productId_categoryId: {
+          productId: dto.productId,
+          categoryId: dto.categoryId,
+        },
+      },
+    });
+
+    if (!exists) {
+      throw new NotFoundException('Связь товар-категория не найдена');
+    }
+
+    await client.productCategory.delete({
+      where: {
+        productId_categoryId: {
+          productId: dto.productId,
+          categoryId: dto.categoryId,
+        },
+      },
+    });
+  }
+
+  async getCategoriesByProduct(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    productId: string,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    // В будущем: проверка, что продукт принадлежит организации user.orgId
+
+    return client.productCategory.findMany({
+      where: { productId },
+      include: {
+        category: { select: { id: true, name: true } },
+      },
+      orderBy: { category: { name: 'asc' } },
+    });
+  }
+
+  async getProductsByCategory(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    categoryId: string,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    return client.productCategory.findMany({
+      where: { categoryId },
+      include: {
+        product: { select: { id: true, name: true } },
+      },
+      orderBy: { product: { name: 'asc' } },
     });
   }
 }

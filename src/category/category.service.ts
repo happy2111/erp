@@ -2,106 +2,156 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
-import { Prisma } from '.prisma/client-tenant';
 import { Tenant } from '@prisma/client';
+import { Prisma } from '.prisma/client-tenant';
+import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { CategoryFilterDto } from './dto/filter-category.dto';
+import { GetCategoryQueryDto } from './dto/get-category-query.dto';
 
 @Injectable()
 export class CategoriesService {
   constructor(private readonly prismaTenant: PrismaTenantService) {}
 
-  async create(tenant: Tenant, dto: CreateCategoryDto) {
+  async getAllAdmin(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    query: GetCategoryQueryDto,
+  ): Promise<{ items: any[]; total: number }> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const exists = await client.category.findUnique({ where: { name: dto.name } });
-    if (exists) {
-      throw new ConflictException(`Категория с именем "${dto.name}" уже существует`);
-    }
+    const {
+      search,
+      sortField = 'name',
+      order = 'asc',
+      page = 1,
+      limit = 20,
+    } = query;
 
-    return client.category.create({
-      data: { name: dto.name },
-    });
-  }
+    const where: Prisma.CategoryWhereInput = search
+      ? { name: { contains: search, mode: 'insensitive' } }
+      : {};
 
-  async findAll(tenant: Tenant, filter: CategoryFilterDto) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const take = filter.limit;
-    const skip = (filter.page - 1) * filter.limit;
+    // В будущем здесь можно добавить: organizationId: user.orgId
 
-    const where: Prisma.CategoryWhereInput = {};
-
-    if (filter.search) {
-      where.name = { contains: filter.search, mode: 'insensitive' };
-    }
-
-    const [data, total] = await client.$transaction([
+    const [items, total] = await Promise.all([
       client.category.findMany({
         where,
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { [sortField]: order },
       }),
       client.category.count({ where }),
     ]);
 
-    return {
-      data,
-      total,
-      page: filter.page,
-      limit: filter.limit,
-    };
+    return { items, total };
   }
 
-  async findOne(tenant: Tenant, id: string) {
+  async getByIdAdmin(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     const category = await client.category.findUnique({
       where: { id },
-      include: { products: true },
+      include: {
+        products: {
+          include: {
+            product: {
+              select: { id: true, name: true, code: true },
+            },
+          },
+        },
+      },
     });
 
-    if (!category) throw new NotFoundException('Категория не найдена');
+    if (!category) {
+      throw new NotFoundException('Категория не найдена');
+    }
+
     return category;
   }
 
-  async update(tenant: Tenant, id: string, dto: UpdateCategoryDto) {
+  async create(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    dto: CreateCategoryDto,
+  ) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const existing = await client.category.findUnique({
+      where: { name: dto.name },
+    });
+
+    if (existing) {
+      throw new ConflictException(`Категория "${dto.name}" уже существует`);
+    }
+
+    return client.category.create({
+      data: {
+        name: dto.name,
+        // organizationId: user.orgId,  ← добавить при необходимости
+      },
+    });
+  }
+
+  async update(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    id: string,
+    dto: UpdateCategoryDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     const category = await client.category.findUnique({ where: { id } });
-    if (!category) throw new NotFoundException('Категория не найдена');
+
+    if (!category) {
+      throw new NotFoundException('Категория не найдена');
+    }
 
     if (dto.name) {
-      const existing = await client.category.findUnique({ where: { name: dto.name } });
-      if (existing && existing.id !== id) {
-        throw new ConflictException(`Категория с именем "${dto.name}" уже существует`);
+      const conflict = await client.category.findUnique({
+        where: { name: dto.name },
+      });
+
+      if (conflict && conflict.id !== id) {
+        throw new ConflictException(`Категория "${dto.name}" уже существует`);
       }
     }
 
     return client.category.update({
       where: { id },
-      data: { ...dto },
+      data: dto,
     });
   }
 
-  async remove(tenant: Tenant, id: string) {
+  async hardDelete(
+    tenant: Tenant,
+    user: JwtAuthenticatedUser,
+    id: string,
+  ): Promise<void> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const category = await client.category.findUnique({ where: { id } });
-    if (!category) throw new NotFoundException('Категория не найдена');
+    const category = await client.category.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { products: true },
+        },
+      },
+    });
 
-    try {
-      await client.category.delete({ where: { id } });
-      return { message: 'Категория успешно удалена' };
-    } catch (e: any) {
-      if (e.code === 'P2003') {
-        throw new BadRequestException('Невозможно удалить категорию: существуют связанные товары');
-      }
-      throw e;
+    if (!category) {
+      throw new NotFoundException('Категория не найдена');
     }
+
+    if (category._count.products > 0) {
+      throw new BadRequestException(
+        'Нельзя удалить категорию — существуют связанные товары',
+      );
+    }
+
+    await client.category.delete({ where: { id } });
   }
 }

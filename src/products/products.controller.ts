@@ -3,127 +3,119 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
+  ApiQuery,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
-import { ProductsService } from './products.service';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { ProductFilterDto } from './dto/filter-product.dto';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
-@ApiTags('Products')
+import { ProductsService } from './products.service';
+import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+import { GetProductQueryDto } from './dto/get-product-query.dto';
+
+@ApiTags('products')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(private readonly service: ProductsService) {}
+
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех товаров организации (админ-панель)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'name' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetProductQueryDto,
+  ) {
+    return this.service.getAllAdmin(tenant, user.orgId, query);
+  }
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Создать новый товар' })
-  @ApiResponse({
-    status: 201,
-    description: 'Товар успешно создан',
-    example: {
-      id: 'uuid-prod',
-      name: 'iPhone 15 Pro',
-      createdAt: '2025-11-06T12:00:00Z',
-    },
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Создать новый товар (organizationId берётся из токена)',
   })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateProductDto) {
-    return this.productsService.create(tenant, dto);
-  }
-
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Фильтрация и пагинация товаров' })
-  @ApiResponse({
-    status: 200,
-    description: 'Список товаров успешно получен',
-    example: {
-      data: [
-        { id: 'uuid-1', name: 'iPhone 15 Pro' },
-        { id: 'uuid-2', name: 'Samsung S25 Ultra' },
-      ],
-      total: 2,
-      page: 1,
-      limit: 10,
-    },
-  })
-  findAll(@CurrentTenant() tenant: Tenant, @Body() filter: ProductFilterDto) {
-    return this.productsService.findAll(tenant, filter);
-  }
-
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить товар по ID' })
-  @ApiParam({ name: 'id', description: 'ID товара' })
-  @ApiResponse({
-    status: 200,
-    description: 'Товар найден',
-    example: {
-      id: 'uuid-prod',
-      name: 'iPhone 15 Pro',
-      brand: { id: 'uuid-brand', name: 'Apple' },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Товар не найден' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productsService.findOne(tenant, id);
+  async create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateProductDto,
+  ) {
+    const product = await this.service.create(tenant, user.orgId, dto);
+    return { data: product };
   }
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Обновить товар' })
-  @ApiParam({ name: 'id', description: 'ID товара' })
-  @ApiResponse({
-    status: 200,
-    description: 'Товар успешно обновлён',
-    example: { id: 'uuid-prod', name: 'Updated Product' },
-  })
-  @ApiResponse({ status: 404, description: 'Товар не найден' })
-  @ApiResponse({
-    status: 409,
-    description: 'Товар с таким кодом уже существует',
-  })
-  update(
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Обновить товар (только своей организации)' })
+  @ApiParam({ name: 'id' })
+  async update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
   ) {
-    return this.productsService.update(tenant, id, dto);
+    const updated = await this.service.update(tenant, user.orgId, id, dto);
+    return { data: updated };
   }
 
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Удалить товар' })
-  @ApiParam({ name: 'id', description: 'ID товара' })
-  @ApiResponse({ status: 200, description: 'Товар успешно удалён' })
-  @ApiResponse({ status: 404, description: 'Товар не найден' })
-  @ApiResponse({
-    status: 400,
-    description: 'Невозможно удалить товар (есть связи)',
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({
+    summary: 'Жёсткое удаление товара (только своей организации)',
   })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productsService.remove(tenant, id);
+  @ApiParam({ name: 'id' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.service.hardDelete(tenant, user.orgId, id);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Получить один товар по ID (только своей организации)',
+  })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const product = await this.service.getByIdAdmin(tenant, user.orgId, id);
+    return product;
   }
 }

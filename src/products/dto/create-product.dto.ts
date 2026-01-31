@@ -1,30 +1,20 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateProductDto {
-  @ApiProperty({ example: 'iPhone 15 Pro', description: 'Название товара' })
+  @ApiProperty({ example: 'iPhone 15 Pro' })
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   name: string;
 
-  @ApiProperty({
-    example: 'Смартфон с 256 ГБ памяти',
-    description: 'Описание товара',
-    required: false,
-  })
-  @IsOptional()
+  @ApiPropertyOptional({ example: 'Флагманский смартфон Apple 2023 года' })
   @IsString()
+  @IsOptional()
   description?: string;
 
-  @ApiProperty({
-    example: 'uuid-brand',
-    description: 'ID бренда',
-    required: false,
-  })
+  @ApiPropertyOptional({ example: 'uuid-brand-apple' })
+  @IsString()
   @IsOptional()
-  @IsString()
   brandId?: string;
-
-  @ApiProperty({ example: 'uuid-org', description: 'ID организации' })
-  @IsString()
-  organizationId: string;
 }
