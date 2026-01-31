@@ -43,8 +43,7 @@ export class TenantUserService {
     } = query;
 
     const where: Prisma.UserWhereInput = {
-      // Можно добавить ограничение по организациям текущего пользователя, если нужно
-      // org_links: { some: { organizationId: currentUser.orgId } },
+      org_links: { some: { organizationId: currentUser.orgId } },
     };
 
     if (search) {
@@ -114,6 +113,13 @@ export class TenantUserService {
           select: {
             organization: { select: { id: true, name: true } },
             role: true,
+          },
+        },
+        cutomer_links: {
+          select: {
+            organization: { select: { id: true, name: true } },
+            type: true,
+            isBlacklisted: true,
           },
         },
       },

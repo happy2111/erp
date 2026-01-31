@@ -1,5 +1,5 @@
 import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 
 // Для обновления существующего телефона
 export class UpdateTenantUserPhoneItemDto {

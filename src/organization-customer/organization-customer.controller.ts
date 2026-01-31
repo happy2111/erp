@@ -2,9 +2,13 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -19,9 +23,11 @@ import type { Tenant } from '@prisma/client';
 import { CreateOrgCustomerDto } from './dto/create-org-customer.dto';
 import type { Response } from 'express';
 import { ConvertCustomerToUserDto } from './dto/convert-customer-to-user.dto';
-import { ApiSecurity } from '@nestjs/swagger';
+import { ApiOperation, ApiParam, ApiQuery, ApiSecurity } from '@nestjs/swagger';
 import { OrganizationCustomerFilterDto } from './dto/filter-org-customer.dto';
 import { UpdateOrgCustomerDto } from './dto/update-org-customer.dto';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @ApiSecurity('x-tenant-key')
 @Controller('organization-customer')
@@ -29,24 +35,107 @@ class OrganizationCustomerController {
   constructor(
     private readonly organizationCustomerService: OrganizationCustomerService,
   ) {}
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Список клиентов организации (пагинация, поиск, сортировка)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Поиск по ФИО / телефону',
+  })
+  @ApiQuery({ name: 'sortField', required: false, example: 'createdAt' })
+  @ApiQuery({
+    name: 'order',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+  })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() currentUser: JwtAuthenticatedUser,
+    @Query() query: OrganizationCustomerFilterDto,
+  ) {
+    return this.organizationCustomerService.getAllAdmin(
+      tenant,
+      currentUser.orgId,
+      query,
+    );
+  }
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Создать нового клиента организации' })
   async create(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() currentUser: JwtAuthenticatedUser,
     @Body() dto: CreateOrgCustomerDto,
-    @Res() res: Response,
   ) {
-    try {
-      const customer = await this.organizationCustomerService.create(
-        tenant,
-        dto,
-      );
-      return res.status(201).json({ success: true, customer });
-    } catch (e) {
-      return res.status(400).json({ success: false, message: e.message });
-    }
+    const customer = await this.organizationCustomerService.create(
+      tenant,
+      currentUser.orgId,
+      dto,
+    );
+    return { data: customer };
+  }
+
+  @Patch('update/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Обновить данные клиента' })
+  @ApiParam({ name: 'id', description: 'ID записи OrganizationCustomer' })
+  async update(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() currentUser: JwtAuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateOrgCustomerDto,
+  ) {
+    const updated = await this.organizationCustomerService.update(
+      tenant,
+      currentUser.orgId,
+      id,
+      dto,
+    );
+    return { data: updated };
+  }
+
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Жёсткое удаление клиента (hard delete)' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() currentUser: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.organizationCustomerService.hardDelete(
+      tenant,
+      currentUser.orgId,
+      id,
+    );
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить данные одного клиента по ID' })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() currentUser: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const customer = await this.organizationCustomerService.getByIdAdmin(
+      tenant,
+      currentUser.orgId,
+      id,
+    );
+    return { data: customer };
   }
 
   @Post('convert-to-user')
@@ -55,44 +144,12 @@ class OrganizationCustomerController {
   async convertToOrgUser(
     @CurrentTenant() tenant: Tenant,
     @Body() dto: ConvertCustomerToUserDto,
-    @Res() res: Response,
   ) {
-    try {
-      return this.organizationCustomerService.convertCustomerToUser(
-        tenant,
-        dto,
-      );
-    } catch (e) {
-      return res.status(400).json({ success: false, message: e.message });
-    }
-  }
-
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  async filter(
-    @CurrentTenant() tenant: Tenant,
-    @Body() dto: OrganizationCustomerFilterDto,
-  ) {
-    return this.organizationCustomerService.filter(tenant, dto);
-  }
-
-  @Delete(':id')
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
-  async deleteCustomer(
-    @CurrentTenant() tenant: Tenant,
-    @Param('id') id: string,
-  ) {
-    return this.organizationCustomerService.delete(tenant, id);
-  }
-
-  @Patch(':id')
-  @UseGuards(ApiKeyGuard)
-  async update(
-    @CurrentTenant() tenant: Tenant,
-    @Param('id') id: string,
-    @Body() dto: UpdateOrgCustomerDto,
-  ) {
-    return this.organizationCustomerService.update(tenant, id, dto);
+    // Просто возвращаем результат промиса. NestJS сам отправит JSON.
+    return await this.organizationCustomerService.convertCustomerToUser(
+      tenant,
+      dto,
+    );
   }
 }
 

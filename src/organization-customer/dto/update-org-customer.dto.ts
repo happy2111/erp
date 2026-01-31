@@ -21,7 +21,6 @@ export class UpdateOrgCustomerDto {
 
   @IsOptional()
   @IsString()
-  @Length(1, 255)
   patronymic?: string;
 
   @IsOptional()

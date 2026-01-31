@@ -1,5 +1,13 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import {
+  IsBoolean,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export enum SortOrder {
   ASC = 'asc',
@@ -7,15 +15,19 @@ export enum SortOrder {
 }
 
 export class OrganizationCustomerFilterDto {
-  @ApiProperty({ example: 1 })
+  @ApiProperty({ example: 1, description: 'Номер страницы' })
+  @Type(() => Number) // Преобразует строку в число
   @IsNumber()
+  @Min(1)
   page: number = 1;
 
-  @ApiProperty({ example: 10 })
+  @ApiProperty({ example: 10, description: 'Количество записей' })
+  @Type(() => Number) // Преобразует строку в число
   @IsNumber()
+  @Min(1)
   limit: number = 10;
 
-  @ApiProperty({ example: 'ASC', enum: SortOrder, required: false })
+  @ApiProperty({ example: SortOrder.ASC, enum: SortOrder, required: false })
   @IsEnum(SortOrder)
   @IsOptional()
   sortOrder?: SortOrder = SortOrder.DESC;
@@ -23,17 +35,13 @@ export class OrganizationCustomerFilterDto {
   @ApiProperty({ example: 'firstName', required: false })
   @IsOptional()
   @IsString()
-  sortBy?: string = 'createdAt'; // упрощённая версия
+  sortBy?: string = 'createdAt';
 
   @ApiProperty({ example: true, required: false })
+  @Type(() => Boolean)
   @IsBoolean()
   @IsOptional()
   isBlacklisted?: boolean;
-
-  @ApiProperty({ example: 'b24c7d4a-1e2b-43a7-9c8b-...', required: false })
-  @IsUUID()
-  @IsOptional()
-  organizationId?: string;
 
   @ApiProperty({ example: 'John', required: false })
   @IsString()

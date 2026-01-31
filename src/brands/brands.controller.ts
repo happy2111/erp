@@ -3,124 +3,115 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
+  ApiQuery,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
-import BrandsService from './brands.service';
-import { CreateBrandDto } from './dto/create-brand.dto';
-import { UpdateBrandDto } from './dto/update-brand.dto';
-import { BrandFilterDto } from './dto/filter-brand.dto';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
-@ApiTags('Brands')
+import { BrandsService } from './brands.service';
+import { CreateBrandDto } from './dto/create-brand.dto';
+import { UpdateBrandDto } from './dto/update-brand.dto';
+import { GetBrandQueryDto } from './dto/get-brand-query.dto';
+
+@ApiTags('brands')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('brands')
 export class BrandsController {
-  constructor(private readonly brandsService: BrandsService) {}
+  constructor(private readonly service: BrandsService) {}
+
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех брендов (админ-панель)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'name' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetBrandQueryDto,
+  ) {
+    return this.service.getAllAdmin(tenant, user, query);
+  }
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({ summary: 'Создать новый бренд' })
-  @ApiResponse({
-    status: 201,
-    description: 'Бренд успешно создан',
-    example: {
-      id: 'uuid-brand',
-      name: 'Apple',
-      createdAt: '2025-11-06T12:00:00Z',
-    },
-  })
-  @ApiResponse({ status: 409, description: 'Бренд с таким именем уже существует' })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateBrandDto) {
-    return this.brandsService.create(tenant, dto);
-  }
-
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Фильтрация и пагинация брендов' })
-  @ApiResponse({
-    status: 200,
-    description: 'Список брендов успешно получен',
-    example: {
-      data: [
-        { id: 'uuid-1', name: 'Apple' },
-        { id: 'uuid-2', name: 'Samsung' },
-      ],
-      total: 2,
-      page: 1,
-      limit: 10,
-    },
-  })
-  findAll(@CurrentTenant() tenant: Tenant, @Body() filter: BrandFilterDto) {
-    return this.brandsService.findAll(tenant, filter);
-  }
-
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить бренд по ID' })
-  @ApiParam({ name: 'id', description: 'ID бренда' })
-  @ApiResponse({
-    status: 200,
-    description: 'Бренд найден',
-    example: {
-      id: 'uuid-brand',
-      name: 'Samsung',
-      products: [
-        { id: 'uuid-product', name: 'Galaxy S25', price: 1200 },
-      ],
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Бренд не найден' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.brandsService.findOne(tenant, id);
+  async create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateBrandDto,
+  ) {
+    const brand = await this.service.create(tenant, user, dto);
+    return { data: brand };
   }
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Обновить данные бренда' })
-  @ApiParam({ name: 'id', description: 'ID бренда' })
-  @ApiResponse({
-    status: 200,
-    description: 'Бренд успешно обновлён',
-    example: { id: 'uuid-brand', name: 'Updated Brand' },
-  })
-  @ApiResponse({ status: 404, description: 'Бренд не найден' })
-  @ApiResponse({ status: 409, description: 'Бренд с таким именем уже существует' })
-  update(
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Обновить бренд' })
+  @ApiParam({ name: 'id' })
+  async update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateBrandDto,
   ) {
-    return this.brandsService.update(tenant, id, dto);
+    const updated = await this.service.update(tenant, user, id, dto);
+    return { data: updated };
   }
 
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Удалить бренд' })
-  @ApiParam({ name: 'id', description: 'ID бренда' })
-  @ApiResponse({ status: 200, description: 'Бренд успешно удалён' })
-  @ApiResponse({ status: 404, description: 'Бренд не найден' })
-  @ApiResponse({ status: 400, description: 'Невозможно удалить бренд (есть связанные товары)' })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.brandsService.remove(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({
+    summary: 'Жёсткое удаление бренда (только если нет связанных продуктов)',
+  })
+  @ApiParam({ name: 'id' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.service.hardDelete(tenant, user, id);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить один бренд по ID (для редактирования)' })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const brand = await this.service.getByIdAdmin(tenant, user, id);
+    return { data: brand };
   }
 }

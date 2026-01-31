@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -16,84 +18,6 @@ import { UpdateOrgCustomerDto } from './dto/update-org-customer.dto';
 @Injectable()
 export class OrganizationCustomerService {
   constructor(private readonly prismaTenant: PrismaTenantService) {}
-
-  async create(tenant: Tenant, dto: CreateOrgCustomerDto) {
-    const client = this.prismaTenant.getTenantPrismaClient(tenant);
-
-    // 0) Ensure organization exists in THIS tenant DB
-    const org = await client.organization.findUnique({
-      where: { id: dto.organizationId },
-    });
-    if (!org) {
-      throw new BadRequestException(
-        `Organization not found by id ${dto.organizationId}`,
-      );
-    }
-
-    // 1) Optional userId: ensure user exists (still optional)
-    if (dto.userId) {
-      const user = await client.user.findUnique({ where: { id: dto.userId } });
-      if (!user) {
-        throw new BadRequestException(`User not found by id ${dto.userId}`);
-      }
-
-      const orgCustomer = await client.organizationCustomer.findFirst({
-        where: { userId: dto.userId },
-      });
-      if (orgCustomer) {
-        throw new BadRequestException(
-          'Customer with this userId already exists',
-        );
-      }
-    }
-
-    // 2) Check duplicate phone among organization customers (you already do this)
-    const existingByPhone = await client.organizationCustomer.findFirst({
-      where: { phone: dto.phone },
-    });
-    if (existingByPhone) {
-      throw new BadRequestException(
-        `Customer with phone ${dto.phone} already exists`,
-      );
-    }
-
-    // 3) Create with robust error handling
-    try {
-      return await client.organizationCustomer.create({
-        data: {
-          organizationId: dto.organizationId,
-          userId: dto.userId ?? null,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          patronymic: dto.patronymic ?? null,
-          phone: dto.phone,
-          type: dto.type,
-          isBlacklisted: dto.isBlacklisted ?? false,
-        },
-      });
-    } catch (e: any) {
-      // Map Prisma errors to readable messages
-      if (e?.code === 'P2003') {
-        // Which FK? Check based on provided fields
-        const reason = dto.userId
-          ? 'organizationId or userId does not exist in this tenant database'
-          : 'organizationId does not exist in this tenant database';
-        throw new BadRequestException(
-          `Foreign key constraint failed: ${reason}.`,
-        );
-      }
-      if (e?.code === 'P2002') {
-        // If you later add unique constraints (e.g., phone), handle here
-        const target =
-          e.meta && (e.meta as any).target
-            ? (e.meta as any).target.join(', ')
-            : 'unknown';
-        throw new BadRequestException(`Unique constraint failed on: ${target}`);
-      }
-      // Don’t hide the real error type
-      throw e;
-    }
-  }
 
   async convertCustomerToUser(tenant: Tenant, dto: ConvertCustomerToUserDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
@@ -243,160 +167,190 @@ export class OrganizationCustomerService {
       if (e instanceof BadRequestException) throw e;
 
       console.error('convertCustomerToUser unexpected error:', e);
-      new InternalServerErrorException('Error converting customer to user');
+      throw new InternalServerErrorException(
+        e.message || 'Error converting customer to user',
+      );
     }
   }
 
-  async filter(tenant: Tenant, dto: OrganizationCustomerFilterDto) {
+  async getAllAdmin(
+    tenant: Tenant,
+    orgId: string,
+    query: OrganizationCustomerFilterDto,
+  ): Promise<{ items: any[]; total: number }> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    const take = dto.limit;
-    const skip = (dto.page - 1) * dto.limit;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      isBlacklisted,
+    } = query;
 
-    // 1️⃣ Build WHERE
-    const where: Prisma.OrganizationCustomerWhereInput = {};
+    const where: Prisma.OrganizationCustomerWhereInput = {
+      organizationId: orgId,
+    };
 
-    if (dto.isBlacklisted !== undefined) {
-      where.isBlacklisted = dto.isBlacklisted;
+    if (isBlacklisted !== undefined) {
+      where.isBlacklisted = isBlacklisted;
     }
 
-    if (dto.organizationId) {
-      where.organizationId = dto.organizationId;
-    }
-
-    // 2️⃣ Поиск по имени, фамилии, телефону
-    if (dto.search) {
-      const searchFilter = {
-        contains: dto.search,
-        mode: 'insensitive' as const,
-      };
+    if (search) {
       where.OR = [
-        { firstName: searchFilter },
-        { lastName: searchFilter },
-        { patronymic: searchFilter },
-        { phone: { contains: dto.search } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { patronymic: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
       ];
     }
 
-    // 3️⃣ Сортировка (просто по любому полю)
-    const orderBy: Prisma.OrganizationCustomerOrderByWithRelationInput = {
-      [dto.sortBy ?? 'createdAt']: dto.sortOrder ?? 'desc',
-    };
-
-    // 4️⃣ Выполняем запрос
-    const [data, total] = await client.$transaction([
+    const [items, total] = await Promise.all([
       client.organizationCustomer.findMany({
         where,
-        take,
-        skip,
-        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        // можно добавить include при необходимости
       }),
       client.organizationCustomer.count({ where }),
     ]);
 
-    return {
-      data,
-      total,
-      page: dto.page,
-      limit: dto.limit,
-    };
+    return { items, total };
   }
 
-  async delete(tenant: Tenant, customerId: string) {
+  async getByIdAdmin(tenant: Tenant, orgId: string, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Проверяем существует ли клиент
-    const customer = await client.organizationCustomer.findUnique({
-      where: { id: customerId },
-      include: { user: true }, // если нужно проверить связанные записи
+    const customer = await client.organizationCustomer.findFirst({
+      where: {
+        id,
+        organizationId: orgId,
+      },
     });
 
     if (!customer) {
       throw new NotFoundException(
-        `OrganizationCustomer with ID ${customerId} not found`,
+        'Клиент не найден или принадлежит другой организации',
       );
     }
 
-    // Если клиент связан с пользователем, можно либо запретить удаление, либо удалить связь
-    if (customer.userId) {
-      throw new BadRequestException(`Cannot delete customer linked to a user`);
+    return customer;
+  }
+
+  async create(tenant: Tenant, orgId: string, dto: CreateOrgCustomerDto) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const existing = await client.organizationCustomer.findFirst({
+      where: { phone: dto.phone, organizationId: orgId },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `Клиент с номером ${dto.phone} уже существует в этой организации`,
+      );
     }
 
-    // Удаляем клиента
-    return client.organizationCustomer.delete({
-      where: { id: customerId },
+    return client.organizationCustomer.create({
+      data: {
+        organizationId: orgId,
+        userId: dto.userId ?? null,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        patronymic: dto.patronymic ?? null,
+        phone: dto.phone,
+        type: dto.type,
+        isBlacklisted: dto.isBlacklisted ?? false,
+      },
     });
   }
 
-  async update(tenant: Tenant, customerId: string, dto: UpdateOrgCustomerDto) {
+  async update(
+    tenant: Tenant,
+    orgId: string,
+    id: string,
+    dto: UpdateOrgCustomerDto,
+  ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Проверяем существует ли клиент
-    const orgCustomer = await client.organizationCustomer.findUnique({
-      where: { id: customerId },
-      include: { user: true },
+    const existing = await client.organizationCustomer.findFirst({
+      where: { id, organizationId: orgId },
+      include: { user: { include: { profile: true } } },
     });
 
-    if (!orgCustomer) {
-      throw new BadRequestException(
-        `OrganizationCustomer with ID ${customerId} not found`,
+    if (!existing) {
+      throw new NotFoundException(
+        'Клиент не найден или принадлежит другой организации',
       );
     }
 
     return client.$transaction(async (tx) => {
-      // 1️⃣ Обновляем OrganizationCustomer
-      const updatedCustomer = await tx.organizationCustomer.update({
-        where: { id: customerId },
-        data: { ...dto },
+      const updated = await tx.organizationCustomer.update({
+        where: { id },
+        data: dto,
       });
 
-      // 2️⃣ Если есть связанный user, синхронизируем данные
-      if (orgCustomer.userId) {
-        const userUpdateData: Prisma.UserUpdateInput = {};
+      // Синхронизация с user / profile, если есть связь (как в твоём текущем коде)
+      if (existing.userId && existing.user) {
+        const profileData: Prisma.UserProfileUpdateInput = {};
+        if (dto.firstName) profileData.firstName = dto.firstName;
+        if (dto.lastName) profileData.lastName = dto.lastName;
+        if (dto.patronymic !== undefined)
+          profileData.patronymic = dto.patronymic;
 
-        // Синхронизируем phone через UserPhone
-        if (dto.phone && dto.phone !== orgCustomer.phone) {
-          // Находим основной телефон пользователя
-          const mainPhone = await tx.userPhone.findFirst({
-            where: { userId: orgCustomer.userId, isPrimary: true },
+        if (Object.keys(profileData).length > 0) {
+          await tx.userProfile.update({
+            where: { userId: existing.userId },
+            data: profileData,
+          });
+        }
+
+        // телефон синхронизируется через UserPhone (как в твоём коде)
+        if (dto.phone && dto.phone !== existing.phone) {
+          const primaryPhone = await tx.userPhone.findFirst({
+            where: { userId: existing.userId, isPrimary: true },
           });
 
-          if (mainPhone) {
+          if (primaryPhone) {
             await tx.userPhone.update({
-              where: { id: mainPhone.id },
+              where: { id: primaryPhone.id },
               data: { phone: dto.phone },
             });
           } else {
-            // Если нет основного, создаем
             await tx.userPhone.create({
               data: {
-                userId: orgCustomer.userId,
+                userId: existing.userId,
                 phone: dto.phone,
                 isPrimary: true,
-                note: 'Synchronized from OrganizationCustomer',
+                note: 'Обновлено из OrganizationCustomer',
               },
             });
           }
         }
-
-        // Синхронизируем имя/фамилию/отчество
-        const profileUpdateData: Prisma.UserProfileUpdateInput = {};
-        if (dto.firstName && dto.firstName !== orgCustomer.firstName)
-          profileUpdateData.firstName = dto.firstName;
-        if (dto.lastName && dto.lastName !== orgCustomer.lastName)
-          profileUpdateData.lastName = dto.lastName;
-        if (dto.patronymic && dto.patronymic !== orgCustomer.patronymic)
-          profileUpdateData.patronymic = dto.patronymic;
-
-        if (Object.keys(profileUpdateData).length > 0) {
-          await tx.userProfile.update({
-            where: { userId: orgCustomer.userId },
-            data: profileUpdateData,
-          });
-        }
       }
 
-      return updatedCustomer;
+      return updated;
     });
+  }
+
+  async hardDelete(tenant: Tenant, orgId: string, id: string): Promise<void> {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    const customer = await client.organizationCustomer.findFirst({
+      where: { id, organizationId: orgId },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Клиент не найден');
+    }
+
+    if (customer.userId) {
+      throw new BadRequestException(
+        'Нельзя удалить клиента, связанного с пользователем системы',
+      );
+    }
+
+    await client.organizationCustomer.delete({ where: { id } });
   }
 }
