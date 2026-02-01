@@ -43,6 +43,9 @@ export class BrandsService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { [sortField]: order },
+        include: {
+          products: true,
+        },
       }),
       client.brand.count({ where }),
     ]);

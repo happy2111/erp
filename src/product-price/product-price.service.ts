@@ -147,10 +147,10 @@ export class ProductPricesService {
       );
     }
 
-    // Если меняем organizationId — проверяем право
-    if (dto.organizationId && dto.organizationId !== orgId) {
-      throw new ForbiddenException('Нельзя привязать цену к чужой организации');
-    }
+    // // Если меняем organizationId — проверяем право
+    // if (dto.organizationId && dto.organizationId !== orgId) {
+    //   throw new ForbiddenException('Нельзя привязать цену к чужой организации');
+    // }
 
     return client.productPrice.update({
       where: { id },

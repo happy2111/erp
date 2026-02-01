@@ -120,7 +120,13 @@ export class ProductsService {
             category: { select: { id: true, name: true } },
           },
         },
-        prices: true,
+        prices: {
+          include: {
+            currency: {
+              select: { symbol: true },
+            },
+          },
+        },
         images: {
           select: {
             id: true,
@@ -128,6 +134,7 @@ export class ProductsService {
             isPrimary: true,
           },
         },
+
         variants: true,
       },
     });
