@@ -68,7 +68,11 @@ export class ProductsService {
               isPrimary: true,
             },
           },
-          variants: true,
+          variants: {
+            include: {
+              images: true,
+            },
+          },
         },
       }),
       client.product.count({ where }),
@@ -135,7 +139,16 @@ export class ProductsService {
           },
         },
 
-        variants: true,
+        variants: {
+          include: {
+            images: true,
+            currency: {
+              select: {
+                symbol: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -155,18 +168,39 @@ export class ProductsService {
       })),
     );
 
+    // 1. Map over each variant, then map over its images
+    const variantImagesNested = await Promise.all(
+      product.variants.map(async (variant) => {
+        return Promise.all(
+          variant.images.map(async (img) => ({
+            id: img.id,
+            variantId: variant.id, // Helpful to know which variant it belongs to
+            isPrimary: img.isPrimary,
+            key: img.key,
+            url: await this.s3Service.getDownloadUrl(img.key, 3600),
+          })),
+        );
+      }),
+    );
+
+    // 2. Flatten the array of arrays into a single list
+    const variantImages = variantImagesNested.flat();
+
     const categories = product.categories.map((pc) => ({
       id: pc.categoryId,
       name: pc.category.name,
     }));
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { categories: _, images: __, ...rest } = product;
+    const { categories: _, images: __, variants, ...rest } = product;
+
+    const formattedVariants = variants.map(({ images, ...v }) => v);
 
     return {
       ...rest,
       categories,
       images,
+      variantImages,
+      variants: formattedVariants,
     };
   }
 

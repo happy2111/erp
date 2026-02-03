@@ -3,99 +3,127 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiParam,
-  ApiTags,
+  ApiQuery,
   ApiSecurity,
+  ApiTags,
 } from '@nestjs/swagger';
-import { ProductVariantsService } from './product-variants.service';
-import { CreateProductVariantDto } from './dto/create-product-variant.dto';
-import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
-import { ProductVariantFilterDto } from './dto/filter-product-variant.dto';
-import type { Tenant } from '@prisma/client';
-import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
+import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
+import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
-@ApiTags('Product Variants')
+import { ProductVariantsService } from './product-variants.service';
+import { CreateProductVariantDto } from './dto/create-product-variant.dto';
+import { UpdateProductVariantDto } from './dto/update-product-variant.dto';
+import { GetProductVariantQueryDto } from './dto/get-product-variant-query.dto';
+
+@ApiTags('product-variants')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('product-variants')
 export class ProductVariantsController {
-  constructor(
-    private readonly productVariantsService: ProductVariantsService,
-  ) {}
+  constructor(private readonly service: ProductVariantsService) {}
+
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех вариантов товаров (админ-панель)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'productId', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'title' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetProductVariantQueryDto,
+  ) {
+    return this.service.getAllAdmin(tenant, user.orgId, query);
+  }
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({ summary: 'Создать новый вариант товара' })
-  @ApiResponse({ status: 201, description: 'Вариант успешно создан' })
-  @ApiResponse({
-    status: 409,
-    description: 'Вариант с таким SKU или штрихкодом уже существует',
-  })
-  create(
+  async create(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Body() dto: CreateProductVariantDto,
   ) {
-    return this.productVariantsService.create(tenant, dto);
-  }
-
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({
-    summary: 'Получить список вариантов товара с фильтрацией и пагинацией',
-  })
-  @ApiResponse({ status: 200, description: 'Список вариантов успешно получен' })
-  findAll(
-    @CurrentTenant() tenant: Tenant,
-    @Body() filter: ProductVariantFilterDto,
-  ) {
-    return this.productVariantsService.findAll(tenant, filter);
-  }
-
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить вариант товара по ID' })
-  @ApiParam({ name: 'id', description: 'ID варианта товара' })
-  @ApiResponse({ status: 200, description: 'Вариант товара найден' })
-  @ApiResponse({ status: 404, description: 'Вариант не найден' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productVariantsService.findOne(tenant, id);
+    const variant = await this.service.create(tenant, user.orgId, dto);
+    return { data: variant };
   }
 
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({ summary: 'Обновить вариант товара' })
-  @ApiResponse({ status: 200, description: 'Вариант успешно обновлён' })
-  @ApiResponse({ status: 404, description: 'Вариант не найден' })
-  update(
+  @ApiParam({ name: 'id' })
+  async update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateProductVariantDto,
   ) {
-    return this.productVariantsService.update(tenant, id, dto);
+    const updated = await this.service.update(tenant, user.orgId, id, dto);
+    return { data: updated };
   }
 
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Удалить вариант товара' })
-  @ApiResponse({ status: 200, description: 'Вариант успешно удалён' })
-  @ApiResponse({ status: 404, description: 'Вариант не найден' })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productVariantsService.remove(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Жёсткое удаление варианта товара' })
+  @ApiParam({ name: 'id' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.service.hardDelete(tenant, user.orgId, id);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить один вариант товара по ID' })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const variant = await this.service.getByIdAdmin(tenant, user.orgId, id);
+    return { data: variant };
+  }
+
+  // Дополнительный удобный эндпоинт — все варианты конкретного товара
+  @Get('product/:productId')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить все варианты конкретного товара' })
+  async getVariantsByProduct(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('productId') productId: string,
+  ) {
+    return this.service.getVariantsByProduct(tenant, user.orgId, productId);
   }
 }
