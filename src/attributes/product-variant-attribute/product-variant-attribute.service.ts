@@ -27,7 +27,7 @@ export class ProductVariantAttributeService {
       search,
       productVariantId,
       attributeValueId,
-      sortField = 'createdAt',
+      sortField = 'id',
       order = 'desc',
       page = 1,
       limit = 50,
