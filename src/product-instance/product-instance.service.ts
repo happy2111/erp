@@ -84,10 +84,6 @@ export class ProductInstanceService {
       return instance;
     });
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // FIND ALL — список экземпляров с фильтрацией и пагинацией
-  // ─────────────────────────────────────────────────────────────
   async findAll(
     tenant: Tenant,
     organizationId: string,
@@ -99,17 +95,28 @@ export class ProductInstanceService {
     const limit = filter.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProductInstanceWhereInput = { organizationId };
+    const where: Prisma.ProductInstanceWhereInput = {
+      organizationId,
+    };
 
-    if (filter.productVariantId)
+    if (filter.productVariantId) {
       where.productVariantId = filter.productVariantId;
-    if (filter.serialNumber)
+    }
+
+    if (filter.serialNumber) {
       where.serialNumber = {
         contains: filter.serialNumber,
         mode: 'insensitive',
       };
-    if (filter.status) where.currentStatus = filter.status;
-    if (filter.currentOwnerId) where.currentOwnerId = filter.currentOwnerId;
+    }
+
+    if (filter.status) {
+      where.currentStatus = filter.status;
+    }
+
+    if (filter.currentOwnerId) {
+      where.currentOwnerId = filter.currentOwnerId;
+    }
 
     const [data, total] = await Promise.all([
       client.productInstance.findMany({
@@ -118,9 +125,26 @@ export class ProductInstanceService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          productVariant: { include: { product: true } },
-          current_owner: true,
-          transactions: { orderBy: { date: 'desc' }, take: 5 }, // последние 5 транзакций
+          productVariant: {
+            include: {
+              product: { select: { id: true, name: true, code: true } },
+            },
+          },
+          current_owner: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
+          transactions: {
+            orderBy: { date: 'desc' },
+            take: 5,
+            include: {
+              // можно добавить from/to если нужно
+            },
+          },
         },
       }),
       client.productInstance.count({ where }),
@@ -142,15 +166,52 @@ export class ProductInstanceService {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     const instance = await client.productInstance.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId, // Важно для безопасности, чтобы не увидеть чужой товар
+      },
       include: {
-        productVariant: { include: { product: true } },
-        current_owner: true,
-        transactions: { orderBy: { date: 'desc' } },
+        // Данные о самом товаре
+        productVariant: {
+          include: {
+            product: true, // Название, описание базового товара
+          },
+        },
+        // Текущий владелец (если продан)
+        current_owner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
+        },
+        // Полная история перемещений
+        transactions: {
+          orderBy: { date: 'desc' },
+          include: {
+            from_customer: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+            to_customer: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
+    if (!instance) {
+      throw new NotFoundException('Экземпляр товара не найден');
+    }
 
     return instance;
   }
@@ -205,9 +266,6 @@ export class ProductInstanceService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // DELETE — удаление экземпляра
-  // ─────────────────────────────────────────────────────────────
   async remove(tenant: Tenant, organizationId: string, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
@@ -264,9 +322,6 @@ export class ProductInstanceService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // RETURN — возврат экземпляра
-  // ─────────────────────────────────────────────────────────────
   async return(tenant: Tenant, organizationId: string, dto: ReturnInstanceDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
@@ -298,9 +353,6 @@ export class ProductInstanceService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // TRANSFER — передача между организациями
-  // ─────────────────────────────────────────────────────────────
   async transfer(
     tenant: Tenant,
     organizationId: string,
@@ -334,9 +386,6 @@ export class ProductInstanceService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // RESELL — перепродажа после возврата
-  // ─────────────────────────────────────────────────────────────
   async resell(tenant: Tenant, organizationId: string, dto: ResellInstanceDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
@@ -370,9 +419,6 @@ export class ProductInstanceService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // MARK LOST — списание / утеря
-  // ─────────────────────────────────────────────────────────────
   async markLost(tenant: Tenant, organizationId: string, dto: MarkLostDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
@@ -400,9 +446,6 @@ export class ProductInstanceService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // PRIVATE HELPERS
-  // ─────────────────────────────────────────────────────────────
   private mapStatusToAction(status: ProductStatus): ProductAction {
     switch (status) {
       case ProductStatus.SOLD:
@@ -410,7 +453,7 @@ export class ProductInstanceService {
       case ProductStatus.RETURNED:
         return ProductAction.RETURNED;
       case ProductStatus.LOST:
-        return ProductAction.TRANSFERRED; // или добавить ProductAction.LOST
+        return ProductAction.TRANSFERRED;
       default:
         return ProductAction.TRANSFERRED;
     }

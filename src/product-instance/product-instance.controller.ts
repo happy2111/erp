@@ -63,25 +63,25 @@ export class ProductInstanceController {
   // ─────────────────────────────────────────────────────────────
   // FIND ALL
   // ─────────────────────────────────────────────────────────────
-  @Get()
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({
-    summary: 'Список экземпляров товара с фильтрацией и пагинацией',
-  })
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех экземпляров товаров организации' })
   @ApiQuery({ name: 'productVariantId', required: false })
   @ApiQuery({ name: 'serialNumber', required: false })
   @ApiQuery({ name: 'status', required: false, enum: ProductStatus })
   @ApiQuery({ name: 'currentOwnerId', required: false })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  findAll(
+  @ApiQuery({ name: 'sortField', required: false, example: 'createdAt' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async findAll(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query() filter: FindAllProductInstanceDto,
   ) {
     return this.productInstanceService.findAll(tenant, user.orgId, filter);
   }
-
   // ─────────────────────────────────────────────────────────────
   // FIND ONE
   // ─────────────────────────────────────────────────────────────

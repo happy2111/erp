@@ -74,10 +74,6 @@ export class OrganizationController {
     @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query() query: GetOrganizationsQueryDto,
   ) {
-    console.log('start');
-    console.log(JSON.stringify(query, null, 2));
-    console.log(JSON.stringify(user, null, 2));
-
     return this.organizationService.findAll(tenant, user, query);
   }
 
