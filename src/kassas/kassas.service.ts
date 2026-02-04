@@ -11,6 +11,7 @@ import { Prisma, PaymentType } from '.prisma/client-tenant';
 import { AuditHelper } from '../audit-logs/audit.helper';
 import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { KassaTransferWithRelations } from '../kassa-transfers/types/kassa-transfer.type';
+import { GetKassaQueryDto } from './dto/get-kassa-query.dto';
 
 @Injectable()
 export class KassasService {
@@ -71,17 +72,19 @@ export class KassasService {
     });
   }
 
-  async findAll(
-    tenant: Tenant,
-    user: JwtAuthenticatedUser,
-    filter?: { page?: number; limit?: number; search?: string },
-  ) {
+  async getAllAdmin(tenant: Tenant, orgId: string, query: GetKassaQueryDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const organizationId = user.orgId;
-    const { page = 1, limit = 20, search } = filter || {};
+
+    const {
+      search,
+      sortField = 'createdAt',
+      order = 'desc',
+      page = 1,
+      limit = 20,
+    } = query;
 
     const where: Prisma.KassaWhereInput = {
-      organizationId,
+      organizationId: orgId,
     };
 
     if (search) {
@@ -93,23 +96,29 @@ export class KassasService {
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [sortField]: order },
         include: {
           currency: {
-            select: { id: true, code: true, name: true, symbol: true },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              symbol: true,
+            },
           },
         },
       }),
       client.kassa.count({ where }),
     ]);
 
+    // Преобразуем Decimal → number
     const transformed = data.map((k) => ({
       ...k,
       balance: Number(k.balance),
     }));
 
     return {
-      data: transformed,
+      items: transformed,
       total,
       page,
       limit,

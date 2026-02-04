@@ -28,6 +28,7 @@ import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
 import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
+import { GetKassaQueryDto } from './dto/get-kassa-query.dto';
 
 @ApiTags('Kassas')
 @ApiSecurity('x-tenant-key')
@@ -53,24 +54,23 @@ export class KassasController {
     return this.kassasService.create(tenant, user, dto);
   }
 
-  @Get()
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить список касс с пагинацией и поиском' })
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Список всех касс организации с пагинацией и поиском',
+  })
+  @ApiQuery({ name: 'search', required: false, example: 'наличные' })
+  @ApiQuery({ name: 'sortField', required: false, example: 'name' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
-  @ApiQuery({ name: 'search', required: false, example: 'наличные' })
-  findAll(
+  async getAllAdmin(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('search') search?: string,
+    @Query() query: GetKassaQueryDto,
   ) {
-    return this.kassasService.findAll(tenant, user, {
-      page: page ? +page : 1,
-      limit: limit ? +limit : 20,
-      search,
-    });
+    return this.kassasService.getAllAdmin(tenant, user.orgId, query);
   }
 
   @Get(':id')
