@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -15,7 +17,6 @@ import {
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
-import { StocksService } from './stocks.service';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
@@ -25,46 +26,54 @@ import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
 import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
-import { StockFilterDto } from './dto/stock-filter.dto';
-import { AdjustStockDto } from './dto/adjust-stock.dto';
 
-@ApiTags('Stocks')
+import { StocksService } from './stocks.service';
+import { AdjustStockDto } from './dto/adjust-stock.dto';
+import { StockFilterDto } from './dto/stock-filter.dto';
+
+@ApiTags('stocks')
 @ApiSecurity('x-tenant-key')
 @ApiBearerAuth()
 @Controller('stocks')
 export class StocksController {
-  constructor(private readonly stocksService: StocksService) {}
+  constructor(private readonly service: StocksService) {}
 
-  @Get()
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
   @ApiOperation({
-    summary: 'Получить список остатков на складе с пагинацией и поиском',
+    summary: 'Список всех остатков на складе организации (админ-панель)',
   })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({
     name: 'search',
     required: false,
-    description: 'Поиск по названию товара / SKU / баркоду',
+    description: 'Поиск по названию / SKU / коду',
   })
-  findAll(
+  @ApiQuery({ name: 'sortField', required: false, example: 'updatedAt' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query() filter: StockFilterDto,
   ) {
-    return this.stocksService.findAll(tenant, user, filter);
+    return this.service.getAllAdmin(tenant, user.orgId, filter);
   }
 
-  @Get('variant/:productVariantId')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить остаток по конкретному варианту товара' })
-  @ApiParam({ name: 'productVariantId', description: 'ID варианта товара' })
-  findOne(
+  @Get('variant/:variantId')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Получить текущий остаток по конкретному варианту товара',
+  })
+  @ApiParam({ name: 'variantId', description: 'ID варианта товара' })
+  async getStockByVariant(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
-    @Param('productVariantId') productVariantId: string,
+    @Param('variantId') variantId: string,
   ) {
-    return this.stocksService.findOne(tenant, user, productVariantId);
+    return this.service.getStockByVariant(tenant, user.orgId, variantId);
   }
 
   @Post('adjust')
@@ -76,13 +85,14 @@ export class StocksController {
     OrgUserRole.ACCOUNTANT,
   )
   @ApiOperation({
-    summary: 'Изменить остаток на складе (приход/расход/корректировка)',
+    summary: 'Изменить остаток на складе (приход / расход / корректировка)',
   })
-  adjustStock(
+  async adjustStock(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Body() dto: AdjustStockDto,
   ) {
-    return this.stocksService.adjustStock(tenant, user, dto);
+    const result = await this.service.adjustStock(tenant, user, dto);
+    return { data: result };
   }
 }

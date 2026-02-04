@@ -47,7 +47,7 @@
 - [x] InstallmentsModule + InstallmentPayments (рассрочки)
 
 ## История и аудит
-
+[decisions.md](decisions.md)
 - [X] TransactionsModule (движение денег, баланс клиента)
 - [X] ProductTransactionsModule (история перемещений товаров)
 - [x] AuditLogsModule (журнал действий пользователей)

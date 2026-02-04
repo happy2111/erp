@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsDateString, IsInt, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsInt,
+  Min,
+} from 'class-validator';
 
 export class UpdateProductBatchDto {
   @ApiPropertyOptional({ example: 'BATCH-2025-01' })

@@ -112,7 +112,6 @@ export class ProductVariantsService {
         );
 
         const { product_variant_attribute, ...rest } = v;
-        console.log(JSON.stringify(images));
 
         return {
           ...rest,

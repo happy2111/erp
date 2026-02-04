@@ -1,13 +1,27 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBooleanString, IsInt, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
+import {
+  IsBooleanString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+
+export enum SortOrder {
+  ASC = 'asc',
+  DESC = 'desc',
+}
 
 export class FilterProductBatchDto {
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @IsPositive()
+  @Min(1)
   page?: number = 1;
 
   @ApiPropertyOptional({ example: 20 })
@@ -17,18 +31,28 @@ export class FilterProductBatchDto {
   @IsPositive()
   limit?: number = 20;
 
-  @ApiPropertyOptional({ example: 'IPH' })
+  @ApiPropertyOptional({ example: 'BATCH-2025' })
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ example: 'uuid-product-123' })
+  @ApiPropertyOptional({ example: 'uuid-варианта' })
   @IsOptional()
   @IsUUID()
   productVariantId?: string;
 
-  @ApiPropertyOptional({ example: true })
+  @ApiPropertyOptional({ example: 'true' })
   @IsOptional()
   @IsBooleanString()
-  isValid?: string; // expects 'true' or 'false' as query string
+  isValid?: string;
+
+  @ApiPropertyOptional({ example: 'createdAt' })
+  @IsOptional()
+  @IsString()
+  sortField?: string;
+
+  @ApiPropertyOptional({ enum: SortOrder })
+  @IsOptional()
+  @IsEnum(SortOrder)
+  order?: SortOrder;
 }

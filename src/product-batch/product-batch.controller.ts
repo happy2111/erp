@@ -3,183 +3,140 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
-  UseGuards,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
-  ApiTags,
+  ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
-  ApiSecurity,
   ApiParam,
+  ApiQuery,
+  ApiSecurity,
+  ApiTags,
 } from '@nestjs/swagger';
-
-import { ProductBatchService } from './product-batch.service';
-import { CreateProductBatchDto } from './dto/create-product-batch.dto';
-import { UpdateProductBatchDto } from './dto/update-product-batch.dto';
-import { FilterProductBatchDto } from './dto/filter-product-batch.dto';
-
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
 import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
-@ApiTags('ProductBatches')
+import { ProductBatchService } from './product-batch.service';
+import { CreateProductBatchDto } from './dto/create-product-batch.dto';
+import { UpdateProductBatchDto } from './dto/update-product-batch.dto';
+import { FilterProductBatchDto } from './dto/filter-product-batch.dto';
+
+@ApiTags('product-batches')
 @ApiSecurity('x-tenant-key')
-@ApiSecurity('Authorization')
+@ApiBearerAuth()
 @Controller('product-batches')
 export class ProductBatchController {
-  constructor(private readonly productBatchService: ProductBatchService) {}
+  constructor(private readonly service: ProductBatchService) {}
 
-  // ============================================================
-  // CREATE
-  // ============================================================
-  @Post('create')
+  @Get('admin/all')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Создать новую партию продукта' })
-  @ApiResponse({
-    status: 201,
-    description: 'Партия успешно создана',
-    example: {
-      id: 'uuid-batch',
-      productVariantId: 'uuid-prod-variant',
-      batchNumber: 'BATCH-2025-001',
-      quantity: 500,
-      expiryDate: '2026-05-30T00:00:00Z',
-      createdAt: '2025-11-06T12:00:00Z',
-    },
-  })
-  create(@CurrentTenant() tenant: Tenant, @Body() dto: CreateProductBatchDto) {
-    return this.productBatchService.create(tenant, dto);
-  }
-
-  // ============================================================
-  // FILTER / PAGINATION
-  // ============================================================
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Фильтрация и пагинация партий продуктов' })
-  @ApiResponse({
-    status: 200,
-    description: 'Список партий успешно получен',
-    example: {
-      data: [
-        {
-          id: 'uuid-batch-1',
-          productVariantId: 'uuid-prod-variant-1',
-          batchNumber: 'BATCH-2025-001',
-          quantity: 100,
-          expiryDate: '2026-01-01T00:00:00Z',
-        },
-      ],
-      total: 1,
-      page: 1,
-      limit: 20,
-      totalPages: 1,
-    },
-  })
-  findAll(
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех партий товаров организации' })
+  @ApiQuery({ name: 'productVariantId', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'createdAt' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query() query: FilterProductBatchDto,
   ) {
-    return this.productBatchService.findAll(tenant, query);
+    return this.service.getAllAdmin(tenant, user.orgId, query);
   }
 
-  // ============================================================
-  // GET BY ID
-  // ============================================================
-  @Get(':id')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить партию продукта по ID' })
-  @ApiParam({ name: 'id', description: 'ID партии продукта' })
-  @ApiResponse({
-    status: 200,
-    description: 'Партия найдена',
-    example: {
-      id: 'uuid-batch',
-      productVariantId: 'uuid-prod-variant',
-      batchNumber: 'BATCH-2025-001',
-      quantity: 500,
-      expiryDate: '2026-05-30T00:00:00Z',
-      createdAt: '2025-11-06T12:00:00Z',
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Партия не найдена' })
-  findOne(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productBatchService.findOne(tenant, id);
+  @Post('create')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Создать новую партию товара' })
+  async create(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Body() dto: CreateProductBatchDto,
+  ) {
+    const batch = await this.service.create(tenant, user.orgId, dto);
+    return { data: batch };
   }
 
-  // ============================================================
-  // UPDATE
-  // ============================================================
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Обновить партию продукта' })
-  @ApiParam({ name: 'id', description: 'ID партии продукта' })
-  @ApiResponse({
-    status: 200,
-    description: 'Партия успешно обновлена',
-    example: {
-      id: 'uuid-batch',
-      batchNumber: 'BATCH-2025-002',
-      quantity: 600,
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Партия не найдена' })
-  update(
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Обновить данные партии' })
+  @ApiParam({ name: 'id' })
+  async update(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateProductBatchDto,
   ) {
-    return this.productBatchService.update(tenant, id, dto);
+    const updated = await this.service.update(tenant, user.orgId, id, dto);
+    return { data: updated };
   }
 
-  // ============================================================
-  // DELETE
-  // ============================================================
-  @Delete('remove/:id')
+  @Delete('remove/:id/hard')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
-  @ApiOperation({ summary: 'Удалить партию продукта' })
-  @ApiParam({ name: 'id', description: 'ID партии продукта' })
-  @ApiResponse({ status: 200, description: 'Партия успешно удалена' })
-  @ApiResponse({ status: 404, description: 'Партия не найдена' })
-  remove(@CurrentTenant() tenant: Tenant, @Param('id') id: string) {
-    return this.productBatchService.delete(tenant, id);
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER)
+  @ApiOperation({ summary: 'Жёсткое удаление партии товара' })
+  @ApiParam({ name: 'id' })
+  async hardDelete(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    await this.service.hardDelete(tenant, user.orgId, id);
   }
 
-  // ============================================================
-  // ANALYTICS / STATS
-  // ============================================================
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить одну партию по ID' })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const batch = await this.service.getByIdAdmin(tenant, user.orgId, id);
+    return { data: batch };
+  }
+
+  // ─── Дополнительные полезные эндпоинты ────────────────────────────────────────
+
+  @Get('variant/:variantId')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Все партии конкретного варианта товара' })
+  async getBatchesByVariant(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('variantId') variantId: string,
+  ) {
+    return this.service.getBatchesByVariant(tenant, user.orgId, variantId);
+  }
+
   @Get('stats/:variantId')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({
-    summary: 'Статистика партий для конкретного варианта продукта',
-  })
-  @ApiParam({ name: 'variantId', description: 'ID варианта продукта' })
-  getStats(
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Статистика по партиям варианта товара' })
+  async getStats(
     @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('variantId') variantId: string,
   ) {
-    return this.productBatchService.getStats(tenant, variantId);
-  }
-
-  @Get('sum/:variantId')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Суммарное количество для варианта продукта' })
-  @ApiParam({ name: 'variantId', description: 'ID варианта продукта' })
-  sumQuantity(
-    @CurrentTenant() tenant: Tenant,
-    @Param('variantId') variantId: string,
-  ) {
-    return this.productBatchService.sumQuantity(tenant, variantId);
+    return this.service.getStats(tenant, user.orgId, variantId);
   }
 }
