@@ -6,19 +6,19 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiOperation,
   ApiParam,
-  ApiResponse,
+  ApiQuery,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
 import { CurrencyRateService } from './currency-rate.service';
 import { CreateCurrencyRateDto } from './dto/create-currency-rate.dto';
 import { UpdateCurrencyRateDto } from './dto/update-currency-rate.dto';
-import { CurrencyRateFilterDto } from './dto/filter-currency-rate.dto';
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { JwtAuthGuard } from '../tenant-auth/guards/jwt.guard';
 import { TenantRolesGuard } from '../guards/tenant-roles.guard';
@@ -26,6 +26,9 @@ import { Roles } from '../decorators/tenant-roles.decorator';
 import { OrgUserRole } from '.prisma/client-tenant';
 import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import type { Tenant } from '@prisma/client';
+import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
+import { GetCurrencyRateQueryDto } from './dto/get-currency-rate-query.dto';
+import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @ApiTags('Currency Rates')
 @ApiSecurity('x-tenant-key')
@@ -42,11 +45,24 @@ export class CurrencyRateController {
     return this.currencyRateService.create(tenant, dto);
   }
 
-  @Post('filter')
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Фильтрация и пагинация курсов валют' })
-  filter(@CurrentTenant() tenant: Tenant, @Body() dto: CurrencyRateFilterDto) {
-    return this.currencyRateService.findAll(tenant, dto);
+  @Get('all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Список всех курсов валют с пагинацией и фильтрацией',
+  })
+  @ApiQuery({ name: 'baseCurrency', required: false, example: 'USD' })
+  @ApiQuery({ name: 'targetCurrency', required: false, example: 'UZS' })
+  @ApiQuery({ name: 'sortField', required: false, example: 'date' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Query() query: GetCurrencyRateQueryDto,
+  ) {
+    return this.currencyRateService.getAllAdmin(tenant, query);
   }
 
   @Get(':id')

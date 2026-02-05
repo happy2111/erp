@@ -4,7 +4,7 @@ import { Tenant } from '@prisma/client';
 import { Prisma } from '.prisma/client-tenant';
 import { CreateCurrencyRateDto } from './dto/create-currency-rate.dto';
 import { UpdateCurrencyRateDto } from './dto/update-currency-rate.dto';
-import { CurrencyRateFilterDto } from './dto/filter-currency-rate.dto';
+import { GetCurrencyRateQueryDto } from './dto/get-currency-rate-query.dto';
 
 @Injectable()
 export class CurrencyRateService {
@@ -17,26 +17,46 @@ export class CurrencyRateService {
     });
   }
 
-  async findAll(tenant: Tenant, filter: CurrencyRateFilterDto) {
+  async getAllAdmin(tenant: Tenant, query: GetCurrencyRateQueryDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const take = filter.limit ?? 10;
-    const skip = ((filter.page ?? 1) - 1) * take;
+
+    const {
+      baseCurrency,
+      targetCurrency,
+      sortField = 'date',
+      order = 'desc',
+      page = 1,
+      limit = 20,
+    } = query;
 
     const where: Prisma.CurrencyRateWhereInput = {};
-    if (filter.baseCurrency) where.baseCurrency = filter.baseCurrency;
-    if (filter.targetCurrency) where.targetCurrency = filter.targetCurrency;
 
-    const [data, total] = await client.$transaction([
+    if (baseCurrency) where.baseCurrency = baseCurrency;
+    if (targetCurrency) where.targetCurrency = targetCurrency;
+
+    const [data, total] = await Promise.all([
       client.currencyRate.findMany({
         where,
-        take,
-        skip,
-        orderBy: { date: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { [sortField]: order },
       }),
       client.currencyRate.count({ where }),
     ]);
 
-    return { data, total, page: filter.page ?? 1, limit: take };
+    // Преобразуем Decimal → number
+    const transformed = data.map((rate) => ({
+      ...rate,
+      rate: Number(rate.rate),
+    }));
+
+    return {
+      items: transformed,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(tenant: Tenant, id: string) {

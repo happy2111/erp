@@ -10,6 +10,7 @@ import { Prisma } from '.prisma/client-tenant';
 import { KassasService } from '../kassas/kassas.service';
 import { AuditHelper } from '../audit-logs/audit.helper';
 import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
+import { GetKassaTransferQueryDto } from './dto/get-kassa-transfer-query.dto';
 
 @Injectable()
 export class KassaTransfersService {
@@ -55,12 +56,11 @@ export class KassaTransfersService {
 
     if (fromKassa.balance.lessThan(amountDecimal)) {
       throw new BadRequestException(
-        `Недостаточно средств на кассе-источнике (${fromKassa.name}). Баланс: ${fromKassa.balance}, требуется: ${dto.amount}`,
+        `Недостаточно средств на кассе-источнике (${fromKassa.name}). Баланс: ${fromKassa.balance.toString()}, требуется: ${dto.amount}`,
       );
     }
 
     return client.$transaction(async (tx) => {
-      // 1. Создаём запись перевода
       const transfer = await tx.kassaTransfer.create({
         data: {
           organizationId,
@@ -121,29 +121,48 @@ export class KassaTransfersService {
     });
   }
 
-  async findAll(
+  async getAllAdmin(
     tenant: Tenant,
-    user: JwtAuthenticatedUser,
-    filter?: { page?: number; limit?: number },
+    orgId: string,
+    query: GetKassaTransferQueryDto,
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const organizationId = user.orgId;
-    const { page = 1, limit = 20 } = filter || {};
+
+    const {
+      search,
+      fromKassaId,
+      toKassaId,
+      sortField = 'createdAt',
+      order = 'desc',
+      page = 1,
+      limit = 20,
+    } = query;
+
+    const where: Prisma.KassaTransferWhereInput = {
+      organizationId: orgId,
+    };
+
+    if (search) {
+      where.description = { contains: search, mode: 'insensitive' };
+    }
+
+    if (fromKassaId) where.fromKassaId = fromKassaId;
+    if (toKassaId) where.toKassaId = toKassaId;
 
     const [data, total] = await Promise.all([
       client.kassaTransfer.findMany({
-        where: { organizationId },
+        where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [sortField]: order },
         include: {
-          from_kassa: { select: { id: true, name: true } },
-          to_kassa: { select: { id: true, name: true } },
-          from_currency: { select: { code: true } },
-          to_currency: { select: { code: true } },
+          from_kassa: { select: { id: true, name: true, type: true } },
+          to_kassa: { select: { id: true, name: true, type: true } },
+          from_currency: { select: { code: true, symbol: true } },
+          to_currency: { select: { code: true, symbol: true } },
         },
       }),
-      client.kassaTransfer.count({ where: { organizationId } }),
+      client.kassaTransfer.count({ where }),
     ]);
 
     const transformed = data.map((t) => ({
@@ -153,7 +172,13 @@ export class KassaTransfersService {
       rate: Number(t.rate),
     }));
 
-    return { data: transformed, total, page, limit };
+    return {
+      items: transformed,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {

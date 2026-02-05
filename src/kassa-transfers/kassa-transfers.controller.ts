@@ -26,6 +26,7 @@ import { CurrentTenant } from '../decorators/currectTenant.decorator';
 import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user.decorator';
 import type { Tenant } from '@prisma/client';
 import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
+import { GetKassaTransferQueryDto } from './dto/get-kassa-transfer-query.dto';
 
 @ApiTags('Kassa Transfers')
 @ApiSecurity('x-tenant-key')
@@ -51,21 +52,27 @@ export class KassaTransfersController {
     return this.transfersService.create(tenant, user, dto);
   }
 
-  @Get()
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Получить список переводов с пагинацией' })
+  @Get('/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Список всех переводов между кассами организации' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Поиск по описанию',
+  })
+  @ApiQuery({ name: 'fromKassaId', required: false })
+  @ApiQuery({ name: 'toKassaId', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'createdAt' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
-  findAll(
+  async getAllAdmin(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() query: GetKassaTransferQueryDto,
   ) {
-    return this.transfersService.findAll(tenant, user, {
-      page: page ? +page : 1,
-      limit: limit ? +limit : 20,
-    });
+    return this.transfersService.getAllAdmin(tenant, user.orgId, query);
   }
 
   @Get(':id')
