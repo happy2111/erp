@@ -183,7 +183,7 @@ export class ProductVariantsService {
     tenant: Tenant,
     orgId: string,
     productId: string,
-    query: GetProductVariantQueryDto, // Добавляем query для пагинации и поиска
+    query: GetProductVariantQueryDto,
   ): Promise<{ items: CleanProductVariant[]; total: number }> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 

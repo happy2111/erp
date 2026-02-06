@@ -13,7 +13,13 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://192.168.1.1',
+      'http://192.168.1.7:3000',
+      'http://192.168.1.7:3001',
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -63,6 +69,7 @@ async function bootstrap() {
     // customSwaggerUiPath: '/swagger',
   });
 
-  await app.listen(process.env.PORT ?? 3000);
+
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();

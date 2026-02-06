@@ -367,6 +367,7 @@ export class SalesService {
       totalPages: Math.ceil(total / limit),
     };
   }
+
   async findOne(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const organizationId = user.orgId;
@@ -384,10 +385,38 @@ export class SalesService {
         },
         currency: true,
         customer: true,
-        responsible: true,
-        kassa: true,
-        payments: true,
+        responsible: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+        kassa: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+          },
+        },
+        payments: {
+          select: {
+            id: true,
+            amount: true,
+            currency: { select: { code: true, symbol: true } },
+            type: true,
+            description: true,
+            saleId: true,
+            customerId: true,
+          },
+        },
         installments: true,
+        returns: true,
       },
     });
 

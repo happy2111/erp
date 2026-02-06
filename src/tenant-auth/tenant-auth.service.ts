@@ -230,9 +230,11 @@ export class TenantAuthService {
   private setAccessCookie(res: Response, value: string, expires: Date) {
     res.cookie('accessToken', value, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      domain: this.COOKIE_DOMAIN,
+      secure: this.configService.get<boolean>('COOKIE_SECURE'),
+      sameSite: this.configService.get<'lax' | 'none'>('COOKIE_SAMESITE'),
+      domain:
+        this.configService.get<string | undefined>('COOKIE_DOMAIN') ||
+        undefined,
       path: '/',
       expires,
     });
@@ -241,10 +243,12 @@ export class TenantAuthService {
   private setRefreshCookie(res: Response, value: string, expires: Date) {
     res.cookie('refreshToken', value, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      domain: this.COOKIE_DOMAIN,
-      path: '/tenant-auth/refresh', // 🔥 важно
+      secure: this.configService.get<boolean>('COOKIE_SECURE'),
+      sameSite: this.configService.get<'lax' | 'none'>('COOKIE_SAMESITE'),
+      domain:
+        this.configService.get<string | undefined>('COOKIE_DOMAIN') ||
+        undefined,
+      path: '/tenant-auth/refresh',
       expires,
     });
   }

@@ -123,7 +123,13 @@ export class ProductVariantsController {
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Param('productId') productId: string,
+    @Query() query: GetProductVariantQueryDto,
   ) {
-    return this.service.getVariantsByProduct(tenant, user.orgId, productId);
+    return this.service.getVariantsByProduct(
+      tenant,
+      user.orgId,
+      productId,
+      query,
+    );
   }
 }
