@@ -28,7 +28,6 @@ export class KassasService {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const organizationId = user.orgId;
 
-    // 1. Проверка валюты
     const currency = await client.currency.findUnique({
       where: { id: dto.currencyId },
     });
@@ -37,7 +36,6 @@ export class KassasService {
     }
 
     return client.$transaction(async (tx) => {
-      // 2. Создаём кассу
       const kassa = await tx.kassa.create({
         data: {
           ...dto,
@@ -51,7 +49,6 @@ export class KassasService {
         },
       });
 
-      // 3. Логируем создание кассы
       await this.auditHelper.log(tx, organizationId, {
         userId: user.userId,
         action: 'CREATE',

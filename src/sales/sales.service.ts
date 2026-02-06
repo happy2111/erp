@@ -19,11 +19,11 @@ import { InstallmentsService } from '../installments/installments.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { AuditHelper } from '../audit-logs/audit.helper';
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { SaleFilterDto } from './dto/sale-filter.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { CodeGeneratorService } from '../code-generater/code-generater.service';
 import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { InstallmentWithCustomer } from '../installments/types/installment';
+import { GetSaleQueryDto } from './dto/get-sale-query.dto';
 
 @Injectable()
 export class SalesService {
@@ -40,6 +40,7 @@ export class SalesService {
   async create(tenant: Tenant, user: JwtAuthenticatedUser, dto: CreateSaleDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const organizationId = user.orgId;
+    const responsibleId = user.userId;
 
     // 1. Проверяем валюту
     const currency = await client.currency.findUnique({
@@ -56,25 +57,13 @@ export class SalesService {
         throw new NotFoundException('Клиент не найден в этой организации');
     }
 
-    // 3. Проверяем ответственного (если указан)
-    if (dto.responsibleId) {
-      const responsible = await client.organizationUser.findFirst({
-        where: { id: dto.responsibleId, organizationId },
-      });
-      if (!responsible)
-        throw new BadRequestException(
-          'Ответственный не найден в этой организации',
-        );
-    }
-
-    // 4. Генерируем номер накладной
     const invoiceNumber = await this.codeGenerator.generateNextCode(tenant, {
       prefix: 'INV',
       modelName: 'sale',
       sequenceLength: 6,
+      fieldName: 'invoiceNumber',
     });
 
-    // 5. Собираем позиции + проверяем товары
     const saleItemsData = await Promise.all(
       dto.items.map(async (item) => {
         const variant = await client.productVariant.findFirst({
@@ -90,10 +79,8 @@ export class SalesService {
             `Вариант товара ${item.productVariantId} не найден или принадлежит другой организации`,
           );
 
-        if (variant.currencyId && variant.currencyId !== dto.currencyId) {
-          throw new BadRequestException(
-            `Валюта варианта (${variant.currency?.code}) не совпадает с валютой продажи (${currency.code})`,
-          );
+        if (item.price < 0) {
+          throw new BadRequestException('Цена не может быть отрицательной');
         }
 
         const total = new Prisma.Decimal(item.quantity).mul(item.price);
@@ -120,7 +107,7 @@ export class SalesService {
         data: {
           organizationId,
           customerId: dto.customerId,
-          responsibleId: dto.responsibleId || user.orgUserId, // по умолчанию текущий пользователь
+          responsibleId,
           kassaId: dto.kassaId,
           invoiceNumber,
           saleDate: new Date(),
@@ -300,41 +287,67 @@ export class SalesService {
     });
   }
 
-  async findAll(
-    tenant: Tenant,
-    user: JwtAuthenticatedUser,
-    filter: SaleFilterDto,
-  ) {
+  async getAllAdmin(tenant: Tenant, orgId: string, query: GetSaleQueryDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const organizationId = user.orgId;
 
-    const { page = 1, limit = 20, search, status } = filter;
+    const {
+      search,
+      status,
+      customerId,
+      kassaId,
+      responsibleId,
+      sortField = 'saleDate',
+      order = 'desc',
+      page = 1,
+      limit = 20,
+    } = query;
 
-    const where: Prisma.SaleWhereInput = { organizationId };
+    const where: Prisma.SaleWhereInput = {
+      organizationId: orgId,
+    };
 
     if (search) {
       where.OR = [
         { invoiceNumber: { contains: search, mode: 'insensitive' } },
         { notes: { contains: search, mode: 'insensitive' } },
+        {
+          customer: {
+            OR: [
+              { firstName: { contains: search, mode: 'insensitive' } },
+              { lastName: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search } },
+            ],
+          },
+        },
       ];
     }
+
     if (status) where.status = status;
+    if (customerId) where.customerId = customerId;
+    if (kassaId) where.kassaId = kassaId;
+    if (responsibleId) where.responsibleId = responsibleId;
 
     const [data, total] = await Promise.all([
       client.sale.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [sortField]: order },
         include: {
           items: {
             include: {
-              product_variant: { select: { title: true, sku: true } },
+              product_variant: {
+                select: { id: true, title: true, sku: true },
+              },
+              currency: { select: { code: true, symbol: true } },
             },
           },
           currency: { select: { code: true, symbol: true } },
-          customer: { select: { firstName: true, lastName: true } },
-          kassa: { select: { name: true } },
+          customer: {
+            select: { id: true, firstName: true, lastName: true, phone: true },
+          },
+          kassa: { select: { id: true, name: true } },
+          responsible: { select: { id: true, email: true } },
         },
       }),
       client.sale.count({ where }),
@@ -346,9 +359,14 @@ export class SalesService {
       paidAmount: Number(sale.paidAmount),
     }));
 
-    return { data: transformed, total, page, limit };
+    return {
+      items: transformed,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
-
   async findOne(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     const organizationId = user.orgId;

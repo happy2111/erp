@@ -28,8 +28,8 @@ import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user
 import type { Tenant } from '@prisma/client';
 import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { SaleFilterDto } from './dto/sale-filter.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
+import { GetSaleQueryDto } from './dto/get-sale-query.dto';
 
 @ApiTags('Sales')
 @ApiSecurity('x-tenant-key')
@@ -57,23 +57,41 @@ export class SalesController {
     return this.salesService.create(tenant, user, dto);
   }
 
-  @Get()
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Список продаж с фильтрацией и пагинацией' })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'search', required: false })
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(
+    OrgUserRole.ADMIN,
+    OrgUserRole.OWNER,
+    OrgUserRole.MANAGER,
+    OrgUserRole.SELLER,
+    OrgUserRole.ACCOUNTANT,
+  )
+  @ApiOperation({
+    summary: 'Список всех продаж организации с фильтрацией и пагинацией',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Поиск по номеру счёта, примечанию, клиенту',
+  })
   @ApiQuery({
     name: 'status',
     required: false,
     enum: ['DRAFT', 'PENDING', 'PAID', 'CANCELLED'],
   })
-  findAll(
+  @ApiQuery({ name: 'customerId', required: false })
+  @ApiQuery({ name: 'kassaId', required: false })
+  @ApiQuery({ name: 'responsibleId', required: false })
+  @ApiQuery({ name: 'sortField', required: false, example: 'saleDate' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
-    @Query() filter: SaleFilterDto,
+    @Query() query: GetSaleQueryDto,
   ) {
-    return this.salesService.findAll(tenant, user, filter);
+    return this.salesService.getAllAdmin(tenant, user.orgId, query);
   }
 
   @Get(':id')

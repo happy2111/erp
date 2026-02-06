@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsNotEmpty, isString, IsString, IsUUID } from 'class-validator';
 
 export enum KassaType {
   CASH = 'наличные',
@@ -14,14 +14,15 @@ export class CreateKassaDto {
   @IsString()
   @IsNotEmpty()
   name: string;
-
-  @ApiProperty({
-    enum: KassaType,
-    example: KassaType.CASH,
-    description: 'Тип кассы',
-  })
-  @IsEnum(KassaType)
-  type: KassaType;
+  //
+  // @ApiProperty({
+  //   enum: KassaType,
+  //   example: KassaType.CASH,
+  //   description: 'Тип кассы',
+  // })
+  // @IsEnum(KassaType)
+  @IsString()
+  type: string;
 
   @ApiProperty({ example: 'uuid-currency', description: 'ID валюты' })
   @IsUUID()
@@ -35,7 +36,6 @@ export class UpdateKassaDto {
   @IsNotEmpty()
   name?: string;
 
-  @ApiProperty({ enum: KassaType, required: false })
-  @IsEnum(KassaType)
-  type?: KassaType;
+  @IsString()
+  type?: string;
 }

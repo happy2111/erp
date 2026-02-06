@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsEnum,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -21,12 +22,14 @@ export class CreateSaleItemDto {
   productVariantId: string;
 
   @ApiProperty({ example: 3, description: 'Количество' })
+  @IsNumber()
   quantity: number;
 
   @ApiProperty({
     example: 2500000,
     description: 'Цена за единицу (в валюте продажи)',
   })
+  @IsNumber()
   price: number;
 }
 
@@ -46,13 +49,6 @@ export class CreateSaleDto {
   @IsOptional()
   @IsUUID()
   kassaId?: string;
-
-  @ApiProperty({
-    example: 'uuid-user',
-    description: 'ID ответственного пользователя',
-  })
-  @IsUUID()
-  responsibleId: string;
 
   @ApiProperty({
     enum: SaleStatus,
@@ -81,7 +77,6 @@ export class CreateSaleDto {
   @IsUUID()
   currencyId: string;
 
-  // НОВОЕ ПОЛЕ — опциональная рассрочка
   @ApiPropertyOptional({
     type: CreateInstallmentDto,
     description: 'Данные для создания рассрочки (если нужна)',

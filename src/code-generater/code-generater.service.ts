@@ -10,6 +10,8 @@ interface CodeGenerationOptions {
   modelName: string;
   /** Длина порядкового номера (например, 4 => 0001, 0010) */
   sequenceLength: number;
+
+  fieldName?: string; // Добавляем опциональное поле, по умолчанию будет 'code'
 }
 
 @Injectable()
@@ -19,7 +21,7 @@ export class CodeGeneratorService {
     tenant: Tenant,
     options: CodeGenerationOptions,
   ): Promise<string> {
-    const { prefix, modelName, sequenceLength } = options;
+    const { prefix, modelName, sequenceLength, fieldName = 'code' } = options;
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
     const clientAny: any = client;
@@ -31,15 +33,15 @@ export class CodeGeneratorService {
     // Запрос к БД для поиска максимального кода
     const latestRecord = await model.findFirst({
       where: {
-        code: {
-          startsWith: `${prefix}-`, // Фильтруем по нужному префиксу
+        [fieldName]: {
+          startsWith: `${prefix}-`,
         },
       },
       orderBy: {
-        code: 'desc', // Сортируем по убыванию
+        [fieldName]: 'desc',
       },
       select: {
-        code: true,
+        [fieldName]: true,
       },
     });
 

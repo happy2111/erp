@@ -1,13 +1,11 @@
 import {
-  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
 import { Tenant } from '@prisma/client';
-import { Prisma, PriceType, CustomerType } from '.prisma/client-tenant';
-import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
+import { Prisma} from '.prisma/client-tenant';
 import { CreateProductPriceDto } from './dto/create-product-price.dto';
 import { UpdateProductPriceDto } from './dto/update-product-price.dto';
 import { GetProductPriceQueryDto } from './dto/get-product-price-query.dto';

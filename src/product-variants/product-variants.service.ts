@@ -34,7 +34,8 @@ export interface CleanProductVariant {
 
 @Injectable()
 export class ProductVariantsService {
-  constructor(private readonly prismaTenant: PrismaTenantService,
+  constructor(
+    private readonly prismaTenant: PrismaTenantService,
     private readonly s3Service: S3Service,
   ) {}
 
@@ -88,6 +89,9 @@ export class ProductVariantsService {
           product: { select: { id: true, name: true, code: true } },
           currency: true,
           images: true,
+          stocks: {
+            select: { quantity: true },
+          },
         },
       }),
       client.productVariant.count({ where }),
@@ -179,52 +183,89 @@ export class ProductVariantsService {
     tenant: Tenant,
     orgId: string,
     productId: string,
-  ): Promise<CleanProductVariant[]> {
+    query: GetProductVariantQueryDto, // Добавляем query для пагинации и поиска
+  ): Promise<{ items: CleanProductVariant[]; total: number }> {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Проверяем, что товар принадлежит текущей организации
-    const productExists = await client.product.findFirst({
-      where: {
-        id: productId,
+    const {
+      search,
+      sortField = 'title',
+      order = 'asc',
+      page = 1,
+      limit = 20,
+    } = query;
+
+    // Базовое условие: принадлежность к конкретному товару И организации
+    const where: Prisma.ProductVariantWhereInput = {
+      productId: productId,
+      product: {
         organizationId: orgId,
       },
-    });
+    };
 
-    if (!productExists) {
-      throw new NotFoundException(
-        'Товар не найден или принадлежит другой организации',
-      );
+    // Добавляем поиск внутри вариантов товара (например по SKU или названию цвета)
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    const variants = await client.productVariant.findMany({
-      where: { productId },
-      include: {
-        product_variant_attribute: {
-          include: {
-            value: {
-              include: { attribute: true },
+    const [rawVariants, total] = await Promise.all([
+      client.productVariant.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { [sortField]: order },
+        include: {
+          product_variant_attribute: {
+            include: {
+              value: {
+                include: { attribute: true },
+              },
             },
           },
+          currency: true,
+          stocks: {
+            select: { quantity: true },
+          },
+          images: true,
         },
-        currency: true,
-      },
-      orderBy: { title: 'asc' },
-    });
+      }),
+      client.productVariant.count({ where }),
+    ]);
 
-    return variants.map((v) => {
-      const attributes = v.product_variant_attribute.map((pva) => ({
-        key: pva.value.attribute.key,
-        name: pva.value.attribute.name,
-        value: pva.value.value,
-      }));
+    // Трансформация данных (атрибуты + ссылки на S3)
+    const items = await Promise.all(
+      rawVariants.map(async (v) => {
+        // Маппинг атрибутов
+        const attributes = v.product_variant_attribute.map((pva) => ({
+          key: pva.value.attribute.key,
+          name: pva.value.attribute.name,
+          value: pva.value.value,
+        }));
 
-      const { product_variant_attribute, ...rest } = v;
+        // Получение подписанных ссылок для изображений
+        const images = await Promise.all(
+          v.images.map(async (img) => ({
+            id: img.id,
+            isPrimary: img.isPrimary,
+            key: img.key,
+            url: await this.s3Service.getDownloadUrl(img.key, 3600),
+          })),
+        );
 
-      return {
-        ...rest,
-        attributes,
-      } as CleanProductVariant;
-    });
+        const { product_variant_attribute, ...rest } = v;
+
+        return {
+          ...rest,
+          attributes,
+          images,
+        } as unknown as CleanProductVariant;
+      }),
+    );
+
+    return { items, total };
   }
 
   async create(tenant: Tenant, orgId: string, dto: CreateProductVariantDto) {
@@ -298,9 +339,6 @@ export class ProductVariantsService {
         'Вариант не найден или принадлежит другой организации',
       );
     }
-
-
-
 
     // 2. Обработка пустых строк (превращаем в null)
     // Мы проверяем undefined, чтобы не затереть данные в null, если поле вообще не пришло в PATCH-запросе
