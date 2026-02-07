@@ -51,12 +51,12 @@ export class KassaTransfersService {
       );
 
     const amountDecimal = new Prisma.Decimal(dto.amount);
-    const rateDecimal = new Prisma.Decimal(dto.rate || 1);
+    const rateDecimal = new Prisma.Decimal(dto.rate);
     const convertedAmount = amountDecimal.mul(rateDecimal);
 
     if (fromKassa.balance.lessThan(amountDecimal)) {
       throw new BadRequestException(
-        `Недостаточно средств на кассе-источнике (${fromKassa.name}). Баланс: ${fromKassa.balance.toString()}, требуется: ${dto.amount}`,
+        `Недостаточно средств. Баланс: ${fromKassa.balance.toFixed(2)}, требуется: ${amountDecimal.toFixed(2)}`,
       );
     }
 

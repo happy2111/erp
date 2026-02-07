@@ -144,6 +144,52 @@ export class SalesService {
         );
       }
 
+      // === НОВАЯ ЛОГИКА ОПЛАТЫ ДЛЯ ОБЫЧНОЙ ПРОДАЖИ (БЕЗ РАССРОЧКИ) ===
+      // Если продажи сразу PAID и НЕТ рассрочки, значит вся сумма падает в кассу
+      if (!dto.installment && sale.status === SaleStatus.PAID && dto.kassaId) {
+        // Создаем платеж на ПОЛНУЮ сумму
+        const payment = await tx.payment.create({
+          data: {
+            organizationId,
+            userId: user.userId,
+            customerId: dto.customerId,
+            kassaId: dto.kassaId,
+            amount: totalAmount, // Вся сумма продажи
+            currencyId: dto.currencyId,
+            type: PaymentType.INCOME,
+            description: `Оплата по продаже ${invoiceNumber}`,
+            saleId: sale.id,
+          },
+        });
+
+        // Обновляем оплаченную сумму в самой продаже
+        await tx.sale.update({
+          where: { id: sale.id },
+          data: { paidAmount: totalAmount },
+        });
+
+        // ОБНОВЛЯЕМ БАЛАНС КАССЫ
+        await this.kassasService.updateBalance(
+          tx,
+          dto.kassaId,
+          Number(totalAmount),
+        );
+
+        if (dto.customerId) {
+          // Создаем транзакцию (фин. лог)
+          await this.transactionsService.createFromPayment(tx, organizationId, {
+            customerId: dto.customerId,
+            relatedType: RelatedType.PAYMENT,
+            relatedId: payment.id,
+            amount: Number(totalAmount),
+            type: PaymentType.INCOME,
+            currencyId: dto.currencyId,
+            description: `Оплата по продаже ${invoiceNumber}`,
+            createdById: user.orgUserId,
+          });
+        }
+      }
+
       // Логируем создание продажи
       await this.auditHelper.log(tx, organizationId, {
         userId: user.userId,
@@ -175,6 +221,13 @@ export class SalesService {
         const initialPayment = new Prisma.Decimal(
           dto.installment.initialPayment,
         );
+
+        if (initialPayment.greaterThan(0)) {
+          await tx.sale.update({
+            where: { id: sale.id },
+            data: { paidAmount: initialPayment },
+          });
+        }
 
         if (!installmentTotal.add(initialPayment).equals(totalAmount)) {
           throw new BadRequestException(
@@ -225,7 +278,7 @@ export class SalesService {
           const initialPaymentObj = await tx.payment.create({
             data: {
               organizationId,
-              userId: user.orgUserId,
+              userId: user.userId,
               customerId: dto.customerId,
               kassaId: dto.kassaId,
               amount: initialPayment,

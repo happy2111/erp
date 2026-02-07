@@ -44,6 +44,7 @@ export class PurchasesController {
     OrgUserRole.ADMIN,
     OrgUserRole.MANAGER,
     OrgUserRole.OWNER,
+    OrgUserRole.SELLER,
     OrgUserRole.ACCOUNTANT,
   )
   @ApiOperation({ summary: 'Создать новую закупку (черновик или сразу)' })

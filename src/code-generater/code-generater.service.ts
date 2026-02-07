@@ -46,9 +46,9 @@ export class CodeGeneratorService {
     });
 
     let currentSequence = 0;
-    if (latestRecord && latestRecord.code) {
+    if (latestRecord && latestRecord[fieldName]) {
       // Извлекаем числовую часть из кода (например, из 'PRD-0005' получаем '5')
-      const parts = latestRecord.code.split('-');
+      const parts = latestRecord[fieldName].split('-');
       const sequenceString = parts[parts.length - 1];
       const parsedSequence = parseInt(sequenceString, 10);
 
