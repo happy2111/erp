@@ -10,6 +10,7 @@ import {
   InstallmentStatus,
   PaymentType,
   Prisma,
+  ProductStatus,
   RelatedType,
   SaleStatus,
 } from '.prisma/client-tenant';
@@ -24,6 +25,7 @@ import { CodeGeneratorService } from '../code-generater/code-generater.service';
 import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { InstallmentWithCustomer } from '../installments/types/installment';
 import { GetSaleQueryDto } from './dto/get-sale-query.dto';
+import { ProductInstanceService } from '../product-instance/product-instance.service';
 
 @Injectable()
 export class SalesService {
@@ -35,6 +37,7 @@ export class SalesService {
     private readonly installmentsService: InstallmentsService,
     private readonly transactionsService: TransactionsService,
     private readonly auditHelper: AuditHelper,
+    private readonly productInstancesService: ProductInstanceService,
   ) {}
 
   async create(tenant: Tenant, user: JwtAuthenticatedUser, dto: CreateSaleDto) {
@@ -46,7 +49,7 @@ export class SalesService {
     const currency = await client.currency.findUnique({
       where: { id: dto.currencyId },
     });
-    if (!currency) throw new BadRequestException('Валюта не найдена');
+    if (!currency) throw new BadRequestException('Valyuta topilmadi');
 
     // 2. Проверяем клиента (если указан)
     if (dto.customerId) {
@@ -54,7 +57,7 @@ export class SalesService {
         where: { id: dto.customerId, organizationId },
       });
       if (!customer)
-        throw new NotFoundException('Клиент не найден в этой организации');
+        throw new NotFoundException('Mijoz ushbu tashkilotda topilmadi');
     }
 
     const invoiceNumber = await this.codeGenerator.generateNextCode(tenant, {
@@ -63,6 +66,20 @@ export class SalesService {
       sequenceLength: 6,
       fieldName: 'invoiceNumber',
     });
+
+    for (const item of dto.items) {
+      if (item.instanceId && item.quantity !== 1) {
+        throw new BadRequestException(
+          'Namunali (instanceId) tovar uchun miqdor 1 ga teng bo‘lishi kerak',
+        );
+      }
+
+      if (item.instanceId && !dto.customerId) {
+        throw new BadRequestException(
+          'Namunali tovar sotilganda mijoz (customerId) ko‘rsatilishi shart',
+        );
+      }
+    }
 
     const saleItemsData = await Promise.all(
       dto.items.map(async (item) => {
@@ -76,11 +93,33 @@ export class SalesService {
 
         if (!variant)
           throw new NotFoundException(
-            `Вариант товара ${item.productVariantId} не найден или принадлежит другой организации`,
+            `Tovar varianti ${item.productVariantId} topilmadi yoki boshqa tashkilotga tegishli`,
           );
 
+        if (item.instanceId) {
+          const instance = await client.productInstance.findFirst({
+            where: {
+              id: item.instanceId,
+              productVariantId: item.productVariantId,
+              organizationId,
+            },
+          });
+
+          if (!instance)
+            throw new NotFoundException('Tovar namunasi topilmadi');
+
+          if (instance.currentStatus !== ProductStatus.IN_STOCK)
+            throw new BadRequestException(
+              'Tovar namunasi sotuv uchun mavjud emas',
+            );
+        }
+
         if (item.price < 0) {
-          throw new BadRequestException('Цена не может быть отрицательной');
+          throw new BadRequestException('Narx manfiy bo‘lishi mumkin emas');
+        }
+
+        if (item.quantity <= 0) {
+          throw new BadRequestException('Miqdor 0 dan katta bo‘lishi kerak');
         }
 
         const total = new Prisma.Decimal(item.quantity).mul(item.price);
@@ -91,6 +130,7 @@ export class SalesService {
           price: new Prisma.Decimal(item.price),
           total,
           currencyId: dto.currencyId,
+          // instanceId: item.instanceId ?? null,
         };
       }),
     );
@@ -134,41 +174,45 @@ export class SalesService {
         },
       });
 
-      // Списываем со склада
-      for (const item of saleItemsData) {
-        await this.stocksService.decrementStock(
-          tx,
-          organizationId,
-          item.productVariantId,
-          item.quantity,
-        );
+      for (const item of dto.items) {
+        if (!item.instanceId) {
+          await this.stocksService.decrementStock(
+            tx,
+            organizationId,
+            item.productVariantId,
+            item.quantity,
+          );
+        } else {
+          await this.productInstancesService.sellWithTx(tx, organizationId, {
+            instanceId: item.instanceId,
+            customerId: dto.customerId!,
+            saleId: sale.id,
+            description: `Chek bo‘yicha sotuv ${invoiceNumber}`,
+          });
+        }
       }
 
       // === НОВАЯ ЛОГИКА ОПЛАТЫ ДЛЯ ОБЫЧНОЙ ПРОДАЖИ (БЕЗ РАССРОЧКИ) ===
-      // Если продажи сразу PAID и НЕТ рассрочки, значит вся сумма падает в кассу
       if (!dto.installment && sale.status === SaleStatus.PAID && dto.kassaId) {
-        // Создаем платеж на ПОЛНУЮ сумму
         const payment = await tx.payment.create({
           data: {
             organizationId,
             userId: user.userId,
             customerId: dto.customerId,
             kassaId: dto.kassaId,
-            amount: totalAmount, // Вся сумма продажи
+            amount: totalAmount,
             currencyId: dto.currencyId,
             type: PaymentType.INCOME,
-            description: `Оплата по продаже ${invoiceNumber}`,
+            description: `Sotuv bo‘yicha to‘lov ${invoiceNumber}`,
             saleId: sale.id,
           },
         });
 
-        // Обновляем оплаченную сумму в самой продаже
         await tx.sale.update({
           where: { id: sale.id },
           data: { paidAmount: totalAmount },
         });
 
-        // ОБНОВЛЯЕМ БАЛАНС КАССЫ
         await this.kassasService.updateBalance(
           tx,
           dto.kassaId,
@@ -176,7 +220,6 @@ export class SalesService {
         );
 
         if (dto.customerId) {
-          // Создаем транзакцию (фин. лог)
           await this.transactionsService.createFromPayment(tx, organizationId, {
             customerId: dto.customerId,
             relatedType: RelatedType.PAYMENT,
@@ -184,7 +227,7 @@ export class SalesService {
             amount: Number(totalAmount),
             type: PaymentType.INCOME,
             currencyId: dto.currencyId,
-            description: `Оплата по продаже ${invoiceNumber}`,
+            description: `Sotuv bo‘yicha to‘lov ${invoiceNumber}`,
             createdById: user.orgUserId,
           });
         }
@@ -202,16 +245,16 @@ export class SalesService {
           totalAmount: Number(totalAmount),
           status: sale.status,
         },
-        note: `Создана новая продажа ${invoiceNumber}`,
+        note: `Yangi sotuv yaratildi ${invoiceNumber}`,
       });
 
-      // === Создание рассрочки (если передан объект installment) ===
+      // === Создание рассрочки ===
       let installment: InstallmentWithCustomer | null = null;
 
       if (dto.installment) {
         if (!dto.customerId) {
           throw new BadRequestException(
-            'Для создания рассрочки необходимо указать клиента (customerId)',
+            'Rassrochka yaratish uchun mijoz (customerId) ko‘rsatilishi shart',
           );
         }
 
@@ -231,7 +274,7 @@ export class SalesService {
 
         if (!installmentTotal.add(initialPayment).equals(totalAmount)) {
           throw new BadRequestException(
-            'Сумма рассрочки + первоначальный взнос не равны общей сумме продажи',
+            "Bo'lib to'lash summasi + boshlang‘ich to‘lov umumiy sotuv summasiga teng bo‘lishi kerak",
           );
         }
 
@@ -269,7 +312,6 @@ export class SalesService {
           },
         });
 
-        // Если продажа сразу PAID и есть kassaId + initialPayment > 0 → создаём платёж на взнос
         if (
           dto.kassaId &&
           sale.status === SaleStatus.PAID &&
@@ -284,7 +326,7 @@ export class SalesService {
               amount: initialPayment,
               currencyId: dto.currencyId,
               type: PaymentType.INCOME,
-              description: `Первоначальный взнос по рассрочке для продажи ${invoiceNumber}`,
+              description: `Rassrochka bo‘yicha boshlang‘ich to‘lov ${invoiceNumber}`,
               saleId: sale.id,
             },
           });
@@ -302,11 +344,10 @@ export class SalesService {
             amount: Number(initialPayment),
             type: PaymentType.INCOME,
             currencyId: dto.currencyId,
-            description: `Первоначальный взнос по рассрочке для продажи ${invoiceNumber}`,
+            description: `Rassrochka bo‘yicha boshlang‘ich to‘lov ${invoiceNumber}`,
             createdById: user.orgUserId,
           });
 
-          // Логируем взнос
           await this.auditHelper.log(tx, organizationId, {
             userId: user.userId,
             action: 'PAYMENT',
@@ -317,7 +358,7 @@ export class SalesService {
               type: PaymentType.INCOME,
               saleId: sale.id,
             },
-            note: `Первоначальный взнос по рассрочке для продажи ${invoiceNumber}`,
+            note: `Rassrochka bo‘yicha boshlang‘ich to‘lov ${invoiceNumber}`,
           });
         }
       }

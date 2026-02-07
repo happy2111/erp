@@ -12,14 +12,21 @@ import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  const allowedOrigins =
+    process.env.FRONTEND_URLS?.split(',').map((o) => o.trim()) ?? [];
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://192.168.1.1',
-      'http://192.168.1.7:3000',
-      'http://192.168.1.7:3001',
-    ],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      if (
+        process.env.NODE_ENV !== 'production' ||
+        allowedOrigins.includes(origin)
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -68,7 +75,6 @@ async function bootstrap() {
     customSiteTitle: 'ERP API',
     // customSwaggerUiPath: '/swagger',
   });
-
 
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }

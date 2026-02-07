@@ -322,6 +322,45 @@ export class ProductInstanceService {
     });
   }
 
+  async sellWithTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    dto: SellInstanceDto,
+  ) {
+    const instance = await tx.productInstance.findFirst({
+      where: { id: dto.instanceId, organizationId },
+    });
+
+    if (!instance) throw new NotFoundException('Экземпляр товара не найден');
+
+    if (instance.currentStatus !== ProductStatus.IN_STOCK)
+      throw new BadRequestException('Товар уже продан');
+
+    const updated = await tx.productInstance.updateMany({
+      where: {
+        id: dto.instanceId,
+        currentStatus: ProductStatus.IN_STOCK,
+      },
+      data: {
+        currentStatus: ProductStatus.SOLD,
+        currentOwnerId: dto.customerId,
+      },
+    });
+
+    if (updated.count === 0) {
+      throw new BadRequestException('Экземпляр уже продан');
+    }
+
+    await this.productTransactionsService.create(tx, organizationId, {
+      productInstanceId: dto.instanceId,
+      fromCustomerId: instance.currentOwnerId ?? null,
+      toCustomerId: dto.customerId,
+      saleId: dto.saleId ?? null,
+      action: ProductAction.SOLD,
+      description: dto.description ?? 'Продажа клиенту',
+    });
+  }
+
   async return(tenant: Tenant, organizationId: string, dto: ReturnInstanceDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 

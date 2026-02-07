@@ -68,6 +68,13 @@
 - [ ] csrf middleware
 
 
+- [ ] type SaleItem =
+| { productVariantId; quantity; price }
+| { productVariantId; instanceId; price; quantity?: never }
+
+Это убирает 50% runtime-проверок.
+
+
 
 
 ## Задать вопрос

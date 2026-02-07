@@ -5,6 +5,7 @@ import { KassasModule } from '../kassas/kassas.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { InstallmentsModule } from '../installments/installments.module';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { ProductInstanceModule } from '../product-instance/product-instance.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { TransactionsModule } from '../transactions/transactions.module';
     PaymentsModule,
     InstallmentsModule,
     TransactionsModule,
+    ProductInstanceModule,
   ],
   controllers: [SalesController],
   providers: [SalesService],

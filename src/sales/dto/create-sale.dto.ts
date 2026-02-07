@@ -2,8 +2,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
   ValidateNested,
@@ -11,7 +13,35 @@ import {
 import { Type } from 'class-transformer';
 import { SaleStatus } from '.prisma/client-tenant';
 
-import { CreateInstallmentDto } from '../../installments/dto/create-installment.dto';
+export class CreateSellInstallmentDto {
+  @ApiProperty({ example: 10000000, description: 'Общая сумма рассрочки' })
+  @IsNumber()
+  @IsPositive()
+  totalAmount: number;
+
+  @ApiProperty({ example: 2000000, description: 'Первоначальный взнос' })
+  @IsNumber()
+  @IsPositive()
+  initialPayment: number;
+
+  @ApiProperty({ example: 12, description: 'Срок рассрочки в месяцах' })
+  @IsInt()
+  @IsPositive()
+  totalMonths: number;
+
+  @ApiPropertyOptional({
+    example: '2026-12-31',
+    description: 'Крайний срок погашения (опционально)',
+  })
+  @IsOptional()
+  @IsString()
+  dueDate?: string;
+
+  @ApiPropertyOptional({ example: 'Рассрочка на 12 месяцев без %' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
 
 export class CreateSaleItemDto {
   @ApiProperty({
@@ -31,6 +61,10 @@ export class CreateSaleItemDto {
   })
   @IsNumber()
   price: number;
+
+  @IsOptional()
+  @IsUUID()
+  instanceId?: string;
 }
 
 export class CreateSaleDto {
@@ -78,11 +112,11 @@ export class CreateSaleDto {
   currencyId: string;
 
   @ApiPropertyOptional({
-    type: CreateInstallmentDto,
+    type: CreateSellInstallmentDto,
     description: 'Данные для создания рассрочки (если нужна)',
   })
   @IsOptional()
   @ValidateNested()
-  @Type(() => CreateInstallmentDto)
-  installment?: CreateInstallmentDto;
+  @Type(() => CreateSellInstallmentDto)
+  installment?: CreateSellInstallmentDto;
 }

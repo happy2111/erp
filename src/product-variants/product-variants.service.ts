@@ -92,6 +92,7 @@ export class ProductVariantsService {
           stocks: {
             select: { quantity: true },
           },
+          product_instance: true,
         },
       }),
       client.productVariant.count({ where }),
@@ -208,6 +209,7 @@ export class ProductVariantsService {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { sku: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -230,6 +232,7 @@ export class ProductVariantsService {
             select: { quantity: true },
           },
           images: true,
+          product_instance: true,
         },
       }),
       client.productVariant.count({ where }),
