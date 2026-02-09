@@ -1,10 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMinSize,
   IsArray,
   IsEnum,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -18,17 +22,28 @@ export class CreatePurchaseItemDto {
   @IsUUID()
   productVariantId: string;
 
-  @ApiProperty({ example: 10, description: 'Количество' })
+  @IsNumber()
+  @IsPositive()
   quantity: number;
 
-  @ApiProperty({
-    example: 12000,
-    description: 'Цена за единицу (в валюте закупки)',
-  })
+  @IsNumber()
+  @IsPositive()
   price: number;
 
-  @ApiPropertyOptional({ example: 500, description: 'Скидка на единицу' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   discount?: number;
+
+  @ApiPropertyOptional({ example: 'BATCH-2025-001' })
+  @IsOptional()
+  @IsString()
+  batchNumber?: string;
+
+  @ApiPropertyOptional({ example: '2026-05-30' })
+  @IsOptional()
+  @Type(() => Date)
+  expiryDate?: Date;
 }
 
 export class CreatePurchaseDto {
@@ -38,14 +53,6 @@ export class CreatePurchaseDto {
   })
   @IsUUID()
   supplierId: string;
-
-  @ApiPropertyOptional({
-    example: 'uuid-user',
-    description: 'ID ответственного пользователя',
-  })
-  @IsOptional()
-  @IsUUID()
-  responsibleId?: string;
 
   @ApiPropertyOptional({
     example: 'uuid-kassa',
@@ -75,10 +82,17 @@ export class CreatePurchaseDto {
   })
   @IsArray()
   @ValidateNested({ each: true })
+  @ArrayMinSize(1)
   @Type(() => CreatePurchaseItemDto)
   items: CreatePurchaseItemDto[];
 
   @ApiProperty({ example: 'uuid-currency', description: 'ID валюты закупки' })
   @IsUUID()
   currencyId: string;
+
+  @ApiPropertyOptional({ example: 1000 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  initialPayment?: number;
 }

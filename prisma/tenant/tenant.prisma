@@ -496,7 +496,10 @@ model ProductBatch {
   isValid          Boolean        @default(true) @map("is_valid") /* Статус активности партии: true — активна, false — просрочена или списана */
   createdAt        DateTime       @default(now()) @map("created_at") /* Дата и время создания записи */
   product_variant  ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  purchaseItemId   String?
+  purches_item     PurchaseItem?  @relation(fields: [purchaseItemId], references: [id], onDelete: SetNull)
 
+  @@unique([productVariantId, batchNumber])
   @@map("product_batches") /* Имя таблицы в базе данных */
 }
 
@@ -735,6 +738,7 @@ model PurchaseItem {
 
   purchase        Purchase       @relation(fields: [purchaseId], references: [id]) /* Связь с закупкой */
   product_variant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade) /* Связь с закупленным товаром */
+  product_batches ProductBatch[]
 
   @@map("purchase_items") /* Название таблицы в базе данных */
 }

@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -28,8 +29,9 @@ import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user
 import type { Tenant } from '@prisma/client';
 import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
-import { PurchaseFilterDto } from './dto/purchase-filter.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
+import { GetPurchaseQueryDto } from './dto/get-purchase-query.dto';
+import { PayPurchaseDto } from './dto/pay-purchase.dto';
 
 @ApiTags('Purchases')
 @ApiSecurity('x-tenant-key')
@@ -56,20 +58,57 @@ export class PurchasesController {
     return this.purchasesService.create(tenant, user, dto);
   }
 
-  @Get()
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Список закупок с фильтрацией и пагинацией' })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'search', required: false })
+  @Get('all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Список всех закупок организации с фильтрацией и пагинацией',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Поиск по номеру накладной, примечанию, имени поставщика',
+  })
   @ApiQuery({ name: 'status', required: false, enum: PurchaseStatus })
   @ApiQuery({ name: 'supplierId', required: false })
-  findAll(
+  @ApiQuery({ name: 'sortField', required: false, example: 'purchaseDate' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
-    @Query() filter: PurchaseFilterDto,
+    @Query() query: GetPurchaseQueryDto,
   ) {
-    return this.purchasesService.findAll(tenant, user, filter);
+    return this.purchasesService.getAllAdmin(tenant, user.orgId, query);
+  }
+
+  @Get('admin/:id')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Получить полную информацию по одной закупке' })
+  async getOneAdmin(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const purchase = await this.purchasesService.getByIdAdmin(
+      tenant,
+      user.orgId,
+      id,
+    );
+    return { data: purchase };
+  }
+
+  @Post(':id/pay')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard)
+  pay(
+    @Param('id') id: string,
+    @CurrentTenantUser() user: JwtAuthenticatedUser,
+    @CurrentTenantUser() tenant: Tenant,
+    @Body() dto: PayPurchaseDto,
+  ) {
+    return this.purchasesService.pay(tenant, user, id, dto);
   }
 
   @Get(':id')
