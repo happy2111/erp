@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMinSize,
   IsArray,
+  IsDateString,
   IsEnum,
   IsInt,
   IsNumber,
@@ -8,6 +10,7 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -16,12 +19,12 @@ import { SaleStatus } from '.prisma/client-tenant';
 export class CreateSellInstallmentDto {
   @ApiProperty({ example: 10000000, description: 'Общая сумма рассрочки' })
   @IsNumber()
-  @IsPositive()
+  @Min(0, { message: "Umumiy narx 0 dan kichik bo'lishi mumkin emas" })
   totalAmount: number;
 
   @ApiProperty({ example: 2000000, description: 'Первоначальный взнос' })
   @IsNumber()
-  @IsPositive()
+  @Min(0, { message: "Boshlang'ich to'lov 0 dan kichik bo'lishi mumkin emas" })
   initialPayment: number;
 
   @ApiProperty({ example: 12, description: 'Срок рассрочки в месяцах' })
@@ -35,6 +38,7 @@ export class CreateSellInstallmentDto {
   })
   @IsOptional()
   @IsString()
+  @IsDateString({}, { message: 'Sana noto‘g‘ri formatda' })
   dueDate?: string;
 
   @ApiPropertyOptional({ example: 'Рассрочка на 12 месяцев без %' })
@@ -53,6 +57,7 @@ export class CreateSaleItemDto {
 
   @ApiProperty({ example: 3, description: 'Количество' })
   @IsNumber()
+  @Min(1, { message: 'Miqdor 1 dan kichik bo‘lishi mumkin emas' })
   quantity: number;
 
   @ApiProperty({
@@ -60,6 +65,7 @@ export class CreateSaleItemDto {
     description: 'Цена за единицу (в валюте продажи)',
   })
   @IsNumber()
+  @Min(0, { message: 'Narx manfiy bo‘lishi mumkin emas' })
   price: number;
 
   @IsOptional()
@@ -105,6 +111,7 @@ export class CreateSaleDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateSaleItemDto)
+  @ArrayMinSize(1, { message: 'Kamida bitta mahsulot bo‘lishi kerak' })
   items: CreateSaleItemDto[];
 
   @ApiProperty({ example: 'UZS', description: 'ID валюты продажи' })

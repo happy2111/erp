@@ -16,9 +16,9 @@ import { KassasService } from '../kassas/kassas.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { CreateInstallmentPaymentDto } from './dto/create-installment-payment.dto';
-import { InstallmentFilterDto } from './dto/installment-filter.dto';
 import { CancelInstallmentDto } from './dto/cancel-installment.dto';
 import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
+import { GetInstallmentQueryDto } from './dto/get-installment-query.dto';
 
 @Injectable()
 export class InstallmentsService {
@@ -125,26 +125,43 @@ export class InstallmentsService {
         throw new BadRequestException('Сумма платежа превышает остаток');
       }
 
+      const kassa = await tx.kassa.findFirst({ where: { id: dto.kassaId } });
+      if (kassa?.currencyId !== installment.sale.currencyId) {
+        throw new BadRequestException(
+          'Валюта кассы не совпадает с валютой продажи',
+        );
+      } else {
+        await this.kassasService.updateBalance(
+          tx,
+          dto.kassaId,
+          amountDecimal.toNumber(),
+        );
+      }
+
       // 2. Платёж по рассрочке
       const installmentPayment = await tx.installmentPayment.create({
         data: {
           installmentId: dto.installmentId,
           amount: amountDecimal,
           paymentMethod: dto.paymentMethod,
-          createdById: user.orgUserId,
+          createdById: user.userId,
           note: dto.note,
         },
       });
 
       // 3. Основной платёж (приход в кассу)
-      await this.paymentsService.create(tenant, user, {
-        type: PaymentType.INCOME,
-        amount: Number(amountDecimal),
-        currencyId: installment.sale.currencyId,
-        kassaId: dto.kassaId,
-        customerId: installment.customerId,
-        saleId: installment.saleId,
-        description: `Платёж по рассрочке #${installment.id} (${dto.note || 'без комментария'})`,
+      const payment = await tx.payment.create({
+        data: {
+          organizationId,
+          userId: user.userId,
+          customerId: installment.customerId,
+          saleId: installment.saleId,
+          kassaId: dto.kassaId,
+          currencyId: installment.sale.currencyId,
+          amount: amountDecimal,
+          type: PaymentType.INCOME,
+          description: `Платёж по рассрочке #${installment.id}`,
+        },
       });
 
       // 4. Обновляем рассрочку
@@ -154,9 +171,20 @@ export class InstallmentsService {
       const newRemaining = new Prisma.Decimal(installment.remaining).sub(
         amountDecimal,
       );
-      const newMonthsLeft = Math.max(0, installment.monthsLeft - 1);
 
-      let newStatus = installment.status;
+      const totalPaidAfterPayment = newPaid;
+      const fullyPaidMonths = totalPaidAfterPayment
+        .div(installment.monthlyPayment)
+        .floor()
+        .toNumber();
+
+      // Новый monthsLeft = сколько месяцев осталось
+      const newMonthsLeft = Math.max(
+        0,
+        installment.totalMonths - fullyPaidMonths,
+      );
+
+      let newStatus: InstallmentStatus = InstallmentStatus.PENDING;
       if (newRemaining.equals(0)) {
         newStatus = InstallmentStatus.COMPLETED;
       } else if (new Date() > installment.dueDate) {
@@ -177,33 +205,58 @@ export class InstallmentsService {
       await this.transactionsService.createFromPayment(tx, organizationId, {
         customerId: installment.customerId,
         relatedType: RelatedType.PAYMENT,
-        relatedId: installmentPayment.id,
-        amount: Number(amountDecimal),
+        relatedId: payment.id,
+        amount: amountDecimal.toNumber(),
         type: PaymentType.INCOME,
         currencyId: installment.sale.currencyId,
         description: `Платёж по рассрочке #${installment.id}`,
+        createdById: user.userId,
       });
 
       return installmentPayment;
     });
   }
 
-  async findAll(
+  async getAllAdmin(
     tenant: Tenant,
-    user: JwtAuthenticatedUser,
-    filter: InstallmentFilterDto,
+    orgId: string,
+    query: GetInstallmentQueryDto,
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const organizationId = user.orgId;
 
-    const { page = 1, limit = 20, customerId, status, overdue } = filter;
+    const {
+      search,
+      customerId,
+      status,
+      overdue,
+      sortField = 'dueDate',
+      order = 'asc',
+      page = 1,
+      limit = 20,
+    } = query;
 
     const where: Prisma.InstallmentWhereInput = {
-      sale: { organizationId },
+      sale: { organizationId: orgId },
     };
+
+    if (search) {
+      where.OR = [
+        { sale: { invoiceNumber: { contains: search, mode: 'insensitive' } } },
+        {
+          customer: {
+            OR: [
+              { firstName: { contains: search, mode: 'insensitive' } },
+              { lastName: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search } },
+            ],
+          },
+        },
+      ];
+    }
 
     if (customerId) where.customerId = customerId;
     if (status) where.status = status;
+
     if (overdue === 'true') {
       where.AND = [
         { status: InstallmentStatus.PENDING },
@@ -216,13 +269,25 @@ export class InstallmentsService {
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { dueDate: 'asc' },
+        orderBy: { [sortField]: order },
         include: {
-          sale: { select: { invoiceNumber: true, totalAmount: true } },
-          customer: {
-            select: { firstName: true, lastName: true, phone: true },
+          sale: {
+            include: {
+              currency: true,
+            },
           },
-          payments: true,
+          customer: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
+          payments: {
+            orderBy: { paidAt: 'desc' },
+            take: 5,
+          },
         },
       }),
       client.installment.count({ where }),
@@ -237,7 +302,13 @@ export class InstallmentsService {
       monthlyPayment: Number(i.monthlyPayment),
     }));
 
-    return { data: transformed, total, page, limit };
+    return {
+      items: transformed,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {
@@ -247,10 +318,15 @@ export class InstallmentsService {
     const installment = await client.installment.findFirst({
       where: { id, sale: { organizationId } },
       include: {
-        sale: true,
+        sale: {
+          include: { currency: true },
+        },
         customer: true,
         payments: {
-          include: { created_by: { select: { email: true } } },
+          include: {
+            created_by: { select: { id: true, email: true } },
+            payment: true,
+          },
         },
       },
     });

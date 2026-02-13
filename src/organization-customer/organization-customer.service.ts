@@ -187,6 +187,7 @@ export class OrganizationCustomerService {
       sortBy = 'createdAt',
       sortOrder = 'desc',
       isBlacklisted,
+      type,
     } = query;
 
     const where: Prisma.OrganizationCustomerWhereInput = {
@@ -195,6 +196,10 @@ export class OrganizationCustomerService {
 
     if (isBlacklisted !== undefined) {
       where.isBlacklisted = isBlacklisted;
+    }
+
+    if (type) {
+      where.type = type;
     }
 
     if (search) {

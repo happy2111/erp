@@ -1,23 +1,42 @@
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { InstallmentStatus } from '.prisma/client-tenant';
 
 export enum SortOrder {
   ASC = 'asc',
   DESC = 'desc',
 }
 
-export class GetKassaQueryDto {
-  @ApiPropertyOptional({ example: 'наличные' })
+export class GetInstallmentQueryDto {
+  @ApiPropertyOptional({ example: 'INV-2025' })
   @IsOptional()
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional({ example: 'uuid-клиента' })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+
+  @ApiPropertyOptional({ enum: InstallmentStatus })
+  @IsOptional()
+  @IsEnum(InstallmentStatus)
+  status?: InstallmentStatus;
+
+  @ApiPropertyOptional({ example: 'true' })
   @IsOptional()
   @IsString()
-  currencyId?: string;
+  overdue?: 'true' | 'false';
 
-  @ApiPropertyOptional({ example: 'name' })
+  @ApiPropertyOptional({ example: 'dueDate' })
   @IsOptional()
   @IsString()
   sortField?: string;

@@ -29,17 +29,18 @@ model Currency {
   /**
    * Связи с другими таблицами
    */
-  product_prices  ProductPrice[] /* Цены на товары, привязанные к валюте */
-  kassas          Kassa[] /* Кассы, работающие в этой валюте */
-  payments        Payment[] /* Платежи, совершённые в этой валюте */
-  transactions    Transaction[] /* Финансовые транзакции, связанные с валютой */
-  sales           Sale[] /* Продажи, проведённые в этой валюте */
-  sale_items      SaleItem[] /* Товары, проданные в этой валюте */
-  purchases       Purchase[] /* Закупки, проведённые в этой валюте */
-  from_transfers  KassaTransfer[]  @relation("FromCurrencyRelation") /* Переводы, исходящие из этой валюты */
-  to_transfers    KassaTransfer[]  @relation("ToCurrencyRelation") /* Переводы, поступающие в эту валюту */
-  settings        Settings[] /* Настройки, где указана валюта по умолчанию или используемая */
-  product_variant ProductVariant[]
+  product_prices     ProductPrice[] /* Цены на товары, привязанные к валюте */
+  kassas             Kassa[] /* Кассы, работающие в этой валюте */
+  payments           Payment[] /* Платежи, совершённые в этой валюте */
+  transactions       Transaction[] /* Финансовые транзакции, связанные с валютой */
+  sales              Sale[] /* Продажи, проведённые в этой валюте */
+  sale_items         SaleItem[] /* Товары, проданные в этой валюте */
+  purchases          Purchase[] /* Закупки, проведённые в этой валюте */
+  from_transfers     KassaTransfer[]    @relation("FromCurrencyRelation") /* Переводы, исходящие из этой валюты */
+  to_transfers       KassaTransfer[]    @relation("ToCurrencyRelation") /* Переводы, поступающие в эту валюту */
+  settings           Settings[] /* Настройки, где указана валюта по умолчанию или используемая */
+  product_variant    ProductVariant[]
+  installment_limits InstallmentLimit[]
 
   @@map("currencies")
 }
@@ -78,20 +79,21 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи, пример: "2025-11-02T12:00:00Z" */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */
 
-  products          Product[] /* Товары, принадлежащие организации */
-  product_prices    ProductPrice[] /* Цены товаров в контексте организации */
-  product_instances ProductInstance[] @relation("OrgProductInstances") /* Конкретные экземпляры товаров (например, по серийным номерам) */
-  kassas            Kassa[] /* Кассы, зарегистрированные в этой организации */
-  payments          Payment[] /* Все платежи, проведённые организацией */
-  transactions      Transaction[] /* Финансовые транзакции организации */
-  sales             Sale[] /* Продажи, совершённые организацией */
-  purchases         Purchase[] /* Закупки, выполненные организацией */
-  stocks            Stock[] /* Складские остатки и движение товаров */
-  kassa_transfers   KassaTransfer[] /* Переводы между кассами организации */
-  settings          Settings? /* Настройки, уникальные для организации (например, валюта по умолчанию) */
-  audit_logs        AuditLog[] /* Журнал действий пользователей внутри организации */
-  documents         Document[] /* Документы, связанные с организацией (накладные, акты и т.д.) */
-  returns           Return[]
+  products            Product[] /* Товары, принадлежащие организации */
+  product_prices      ProductPrice[] /* Цены товаров в контексте организации */
+  product_instances   ProductInstance[]   @relation("OrgProductInstances") /* Конкретные экземпляры товаров (например, по серийным номерам) */
+  kassas              Kassa[] /* Кассы, зарегистрированные в этой организации */
+  payments            Payment[] /* Все платежи, проведённые организацией */
+  transactions        Transaction[] /* Финансовые транзакции организации */
+  sales               Sale[] /* Продажи, совершённые организацией */
+  purchases           Purchase[] /* Закупки, выполненные организацией */
+  stocks              Stock[] /* Складские остатки и движение товаров */
+  kassa_transfers     KassaTransfer[] /* Переводы между кассами организации */
+  settings            Settings? /* Настройки, уникальные для организации (например, валюта по умолчанию) */
+  audit_logs          AuditLog[] /* Журнал действий пользователей внутри организации */
+  documents           Document[] /* Документы, связанные с организацией (накладные, акты и т.д.) */
+  returns             Return[]
+  installment_setting InstallmentSetting?
 
   @@map("organizations")
 }
@@ -868,24 +870,76 @@ model Document {
 }
 
 /**
+ * Модель InstallmentSetting хранит глобальные настройки рассрочки для организации.
+ * Определяет активность рассрочки, ограничения по сумме,
+ * минимальный первоначальный взнос и правила начисления штрафов.
+ */
+model InstallmentSetting {
+  id             String @id @default(uuid()) /* Уникальный идентификатор настроек рассрочки */
+  organizationId String @unique /* ID организации, для которой применяются данные настройки */
+
+  isActive Boolean @default(true) /* Включена ли рассрочка для организации */
+
+  penaltyPercent Decimal? @db.Decimal(5, 2) /* Процентный штраф за просрочку платежа, например 5 = 5% */
+  penaltyFixed   Decimal? @db.Decimal(15, 2) /* Фиксированный штраф за просрочку (может применяться отдельно или вместе с процентным) */
+
+  plans              InstallmentPlan[] /* Доступные планы рассрочки (сроки и коэффициенты) */
+  installment_limits InstallmentLimit[]
+
+  createdAt DateTime @default(now()) /* Дата создания записи */
+  updatedAt DateTime @updatedAt /* Дата последнего обновления записи */
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией */
+}
+
+/**
+ * Модель InstallmentPlan хранит конкретные планы рассрочки.
+ * Каждый план определяет срок (в месяцах) и коэффициент наценки.
+ */
+model InstallmentPlan {
+  id                   String @id @default(uuid()) /* Уникальный идентификатор плана рассрочки */
+  installmentSettingId String /* ID настроек рассрочки, к которым относится данный план */
+
+  months      Int /* Срок рассрочки в месяцах (например 1, 3, 6) */
+  coefficient Decimal @db.Decimal(5, 3) /* Коэффициент наценки, например 1.15 означает +15% к сумме */
+
+  installmentSetting InstallmentSetting @relation(fields: [installmentSettingId], references: [id], onDelete: Cascade) /* Связь с InstallmentSetting, при удалении настройки планы удаляются */
+
+  @@unique([installmentSettingId, months]) /* Запрещает создавать два плана с одинаковым сроком для одной настройки */
+}
+
+model InstallmentLimit {
+  id                   String @id @default(uuid())
+  installmentSettingId String
+  currencyId           String
+
+  minInitialPayment Decimal? @db.Decimal(15, 2) /* Минимальный первоначальный взнос; если null — ограничение отсутствует */
+  maxAmount         Decimal? @db.Decimal(15, 2) /* Максимальная сумма, доступная для оформления рассрочки; если null — лимита нет */
+
+  currency           Currency           @relation(fields: [currencyId], references: [id], onDelete: Cascade)
+  installmentSetting InstallmentSetting @relation(fields: [installmentSettingId], references: [id], onDelete: Cascade)
+
+  @@unique([installmentSettingId, currencyId])
+}
+
+/**
  * Модель Settings хранит настройки организации.
  * Используется для управления валютой, языком, форматом даты, включением рассрочек, уведомлений, логотипом и темой.
  */
 model Settings {
   id                   String    @id @default(uuid()) /* Уникальный идентификатор настроек, пример: "f1a2b3c4-5d6e-7f8a-9b0c-1d2e3f4a5b6c" */
   organizationId       String    @unique @map("organization_id") /* ID организации, для которой применяются настройки */
-  baseCurrencyId       String    @map("base_currency_id") /* ID базовой валюты организации */
+  baseCurrencyId       String?   @map("base_currency_id") /* ID базовой валюты организации */
   language             String?   @default("ru") /* Язык интерфейса, пример: "ru" или "en" */
   dateFormat           String?   @default("DD.MM.YYYY") /* Формат отображения даты */
-  enableInstallment    Boolean   @default(true) /* Включена ли возможность рассрочки при продаже */
-  enableNotifications  Boolean   @default(true) /* Включение уведомлений клиентам или пользователям */
+  enableNotifications  Boolean   @default(false) /* Включение уведомлений клиентам или пользователям */
   enableAutoRateUpdate Boolean   @default(false) /* Разрешить автоматическое обновление курсов валют */
   taxPercent           Decimal?  @default(0) /* Общий налог, например НДС, пример: 15.0 */
   logoUrl              String? /* Ссылка на логотип организации */
   theme                ThemeType @default(LIGHT) /* Тема интерфейса, пример: LIGHT или DARK */
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade) /* Связь с организацией */
-  baseCurrency Currency     @relation(fields: [baseCurrencyId], references: [id], onDelete: Restrict) /* Связь с базовой валютой */
+  baseCurrency Currency?    @relation(fields: [baseCurrencyId], references: [id], onDelete: SetNull) /* Связь с базовой валютой */
 
   createdAt DateTime @default(now()) @map("created_at") /* Дата создания записи */
   updatedAt DateTime @updatedAt @map("updated_at") /* Дата последнего обновления записи */

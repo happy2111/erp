@@ -44,11 +44,10 @@ async function bootstrap() {
     prefix: '/schema/doc',
   });
 
+
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  app.useGlobalFilters(new AllExceptionsFilter());
-
-  app.useGlobalFilters(new PrismaExceptionFilter());
+  app.useGlobalFilters(new PrismaExceptionFilter(), new AllExceptionsFilter());
 
   const config = new DocumentBuilder()
     .setTitle('ERP API')

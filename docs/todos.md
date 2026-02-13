@@ -75,6 +75,18 @@
 Это убирает 50% runtime-проверок.
 
 
+- [ ] model InstallmentSchedule {
+id            String   @id @default(uuid())
+installmentId String
+monthNumber   Int      // 1, 2, 3 ...
+dueAmount     Decimal
+paidAmount    Decimal  @default(0)
+status        InstallmentStatus @default(PENDING)
+dueDate       DateTime
+}
+
+
+
 
 
 ## Задать вопрос

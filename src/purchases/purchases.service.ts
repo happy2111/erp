@@ -94,6 +94,7 @@ export class PurchasesService {
       prefix: 'PUR',
       modelName: 'purchase',
       sequenceLength: 6,
+      fieldName: 'invoiceNumber',
     });
 
     // 5. Собираем позиции + проверяем товары
@@ -151,8 +152,12 @@ export class PurchasesService {
           discount: new Prisma.Decimal(item.discount || 0),
           total,
 
-          batchNumber: item.batchNumber ?? null,
-          expiryDate: item.expiryDate ?? null,
+          _batch: item.batchNumber
+            ? {
+                batchNumber: item.batchNumber,
+                expiryDate: item.expiryDate ?? null,
+              }
+            : null,
         };
       }),
     );
@@ -192,7 +197,7 @@ export class PurchasesService {
         data: {
           organizationId,
           supplierId: dto.supplierId,
-          responsibleId: user.orgUserId,
+          responsibleId: user.userId,
           kassaId: isPaidNow ? dto.kassaId : null,
           invoiceNumber,
           purchaseDate: new Date(),
@@ -206,7 +211,7 @@ export class PurchasesService {
               : PurchaseStatus.PAID,
           notes: dto.notes,
           items: {
-            create: purchaseItemsData,
+            create: purchaseItemsData.map(({ _batch, ...item }) => item),
           },
         },
         include: {
@@ -253,31 +258,30 @@ export class PurchasesService {
           description: `Оплата закупки ${invoiceNumber}`,
           createdById: user.orgUserId,
         });
-      }
+        if (isPaidNow) {
+          for (let i = 0; i < purchase.items.length; i++) {
+            const item = purchase.items[i];
+            const source = purchaseItemsData[i];
 
-      if (
-        dto.status === PurchaseStatus.PAID ||
-        dto.status === PurchaseStatus.PARTIAL
-      ) {
-        for (const item of purchaseItemsData) {
-          if (item.batchNumber) {
-            await tx.productBatch.create({
-              data: {
-                productVariantId: item.productVariantId,
-                batchNumber: item.batchNumber,
-                expiryDate: item.expiryDate,
-                quantity: item.quantity,
-                isValid: true,
-              },
-            });
+            if (source._batch) {
+              await tx.productBatch.create({
+                data: {
+                  productVariantId: item.productVariantId,
+                  batchNumber: source._batch.batchNumber,
+                  expiryDate: source._batch.expiryDate,
+                  quantity: item.quantity,
+                  purchaseItemId: item.id,
+                },
+              });
+            }
+
+            await this.stocksService.incrementStock(
+              tx,
+              organizationId,
+              item.productVariantId,
+              item.quantity,
+            );
           }
-
-          await this.stocksService.incrementStock(
-            tx,
-            organizationId,
-            item.productVariantId,
-            item.quantity,
-          );
         }
       }
 
@@ -455,7 +459,6 @@ export class PurchasesService {
     });
   }
 
-  // TODO: POST /purchases/:id/pay
   async getAllAdmin(tenant: Tenant, orgId: string, query: GetPurchaseQueryDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
@@ -546,14 +549,32 @@ export class PurchasesService {
             product_variant: {
               select: { id: true, title: true, sku: true, barcode: true },
             },
+            product_batches: true,
           },
         },
         currency: { select: { code: true, symbol: true } },
         supplier: {
-          select: { id: true, firstName: true, lastName: true, phone: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            user: { select: { id: true }, include: { phone_numbers: true } },
+          },
         },
-        responsible: { select: { id: true, email: true } },
-        kassa: { select: { id: true, name: true } },
+        responsible: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+        kassa: { select: { id: true, name: true, type: true } },
         payments: true,
       },
     });
@@ -581,7 +602,7 @@ export class PurchasesService {
         items: {
           include: {
             product_variant: {
-              select: { title: true, sku: true, barcode: true },
+              select: {id: true, title: true, sku: true, barcode: true },
             },
           },
         },

@@ -8,6 +8,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { CustomerType } from '.prisma/client-tenant';
 
 export enum SortOrder {
   ASC = 'asc',
@@ -16,13 +17,17 @@ export enum SortOrder {
 
 export class OrganizationCustomerFilterDto {
   @ApiProperty({ example: 1, description: 'Номер страницы' })
-  @Type(() => Number) // Преобразует строку в число
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   page: number = 1;
 
+  @IsOptional()
+  @IsEnum(CustomerType)
+  type?: CustomerType;
+
   @ApiProperty({ example: 10, description: 'Количество записей' })
-  @Type(() => Number) // Преобразует строку в число
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   limit: number = 10;

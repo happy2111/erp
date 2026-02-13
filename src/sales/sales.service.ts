@@ -60,6 +60,12 @@ export class SalesService {
         throw new NotFoundException('Mijoz ushbu tashkilotda topilmadi');
     }
 
+    if (dto.installment && !dto.kassaId) {
+      throw new BadRequestException(
+        `Bo'lib to'lash yaratish uchun "Kassani" belgilash shart`,
+      );
+    }
+
     const invoiceNumber = await this.codeGenerator.generateNextCode(tenant, {
       prefix: 'INV',
       modelName: 'sale',
@@ -254,16 +260,56 @@ export class SalesService {
       if (dto.installment) {
         if (!dto.customerId) {
           throw new BadRequestException(
-            'Rassrochka yaratish uchun mijoz (customerId) ko‘rsatilishi shart',
+            'Rassrochka yaratish uchun mijoz ko‘rsatilishi shart',
           );
         }
 
-        const installmentTotal = new Prisma.Decimal(
-          dto.installment.totalAmount,
-        );
+        const installmentSettings = await tx.installmentSetting.findUnique({
+          where: { organizationId },
+          include: { plans: true, installment_limits: true },
+        });
+
+        if (!installmentSettings || !installmentSettings?.isActive) {
+          throw new BadRequestException(
+            'Rassrochka yaratish uchun yarating yoki faollashtiring sozlamalardan',
+          );
+        }
+
         const initialPayment = new Prisma.Decimal(
           dto.installment.initialPayment,
         );
+
+        if (initialPayment.greaterThan(totalAmount)) {
+          throw new BadRequestException(
+            "Boshlang'ich to'lov umumiy summadan katta bo'lishi mumkin emas",
+          );
+        }
+
+        const installmentTotal = totalAmount.sub(initialPayment);
+
+        if (installmentSettings.installment_limits.length > 0) {
+          const limit = installmentSettings.installment_limits.find(
+            (l) => l.currencyId === dto.currencyId,
+          );
+
+          if (limit) {
+            if (limit.minInitialPayment !== null) {
+              if (initialPayment.lt(limit.minInitialPayment)) {
+                throw new BadRequestException(
+                  `Boshlang'ich to'liv minimal (${limit.minInitialPayment.toString()}${currency.symbol}) tolovda katta yoki teng bo'lis shart`,
+                );
+              }
+            }
+
+            if (limit.maxAmount !== null) {
+              if (installmentTotal.greaterThan(limit.maxAmount)) {
+                throw new BadRequestException(
+                  `To‘lov miqdori belgilangan maksimal limitdan oshib ketdi - ${limit.maxAmount.toString()}${currency.symbol}`,
+                );
+              }
+            }
+          }
+        }
 
         if (initialPayment.greaterThan(0)) {
           await tx.sale.update({
@@ -278,26 +324,61 @@ export class SalesService {
           );
         }
 
-        const monthlyPayment = installmentTotal.div(
-          dto.installment.totalMonths,
+        let monthlyPayment: Prisma.Decimal | null = null;
+
+        if (!installmentSettings.plans.length) {
+          throw new BadRequestException('Installment plans not configured');
+        }
+
+        const plan = installmentSettings.plans.find(
+          (p) => p.months === dto.installment?.totalMonths,
         );
+
+        if (!plan) {
+          throw new BadRequestException('Invalid installment plan');
+        }
+
+        const coefficientDecimal = new Prisma.Decimal(plan.coefficient);
+
+        const totalWithCoefficient = installmentTotal
+          .mul(coefficientDecimal)
+          .toDecimalPlaces(2);
+
+        monthlyPayment = totalWithCoefficient
+          .div(plan.months)
+          .toDecimalPlaces(2);
 
         const dueDate = dto.installment.dueDate
           ? new Date(dto.installment.dueDate)
           : (() => {
               const date = new Date();
-              date.setMonth(date.getMonth() + dto.installment.totalMonths);
+              date.setMonth(date.getMonth() + plan.months);
               return date;
             })();
+
+        const correctedTotalAmount = totalWithCoefficient.add(initialPayment);
+
+        if (
+          !correctedTotalAmount.equals(totalAmount) ||
+          initialPayment.greaterThan(0)
+        ) {
+          await tx.sale.update({
+            where: { id: sale.id },
+            data: {
+              totalAmount: correctedTotalAmount,
+              paidAmount: initialPayment,
+            },
+          });
+        }
 
         installment = await tx.installment.create({
           data: {
             saleId: sale.id,
             customerId: dto.customerId,
-            totalAmount: installmentTotal,
+            totalAmount: totalWithCoefficient,
             initialPayment,
             paidAmount: initialPayment,
-            remaining: installmentTotal,
+            remaining: totalWithCoefficient,
             totalMonths: dto.installment.totalMonths,
             monthsLeft: dto.installment.totalMonths,
             monthlyPayment,
@@ -478,7 +559,13 @@ export class SalesService {
           },
         },
         currency: true,
-        customer: true,
+        customer: {
+          include: {
+            user: {
+              include: { phone_numbers: true },
+            },
+          },
+        },
         responsible: {
           select: {
             id: true,

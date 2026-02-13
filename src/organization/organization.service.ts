@@ -58,6 +58,14 @@ export class OrganizationService {
         },
       });
 
+      const settrings = await tx.settings.create({
+        data: {
+          organizationId: organization.id,
+        },
+      });
+
+
+
       // 3. Логируем создание организации
       await this.auditHelper.log(tx, organization.id, {
         userId: user.userId,

@@ -42,6 +42,8 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ReportsModule } from './reports/reports.module';
 import { ReturnsModule } from './returns/returns.module';
+import { SettingsModule } from './settings/settings.module';
+import { InstallmentSettingsModule } from './installment-settings/installment-settings.module';
 
 @Module({
   imports: [
@@ -87,6 +89,8 @@ import { ReturnsModule } from './returns/returns.module';
     DocumentsModule,
     ReportsModule,
     ReturnsModule,
+    SettingsModule,
+    InstallmentSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

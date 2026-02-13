@@ -78,11 +78,16 @@ export class KassasService {
       order = 'desc',
       page = 1,
       limit = 20,
+      currencyId,
     } = query;
 
     const where: Prisma.KassaWhereInput = {
       organizationId: orgId,
     };
+
+    if (currencyId) {
+      where.currencyId = currencyId;
+    }
 
     if (search) {
       where.name = { contains: search, mode: 'insensitive' };

@@ -16,7 +16,13 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
 
-    this.logger.error(`Prisma Error: ${exception.code}`, exception.message);
+    const request = ctx.getRequest();
+
+    this.logger.error(
+      `Prisma Error ${exception.code} on ${request.method} ${request.url}`,
+      exception.stack,
+      exception.message,
+    );
 
     let message = 'Database error';
     let status = HttpStatus.INTERNAL_SERVER_ERROR;

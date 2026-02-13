@@ -26,9 +26,9 @@ import { CurrentTenantUser } from '../tenant-auth/decorators/current-tenant-user
 import type { Tenant } from '@prisma/client';
 import type { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 import { CreateInstallmentPaymentDto } from './dto/create-installment-payment.dto';
-import { InstallmentFilterDto } from './dto/installment-filter.dto';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { CancelInstallmentDto } from './dto/cancel-installment.dto';
+import { GetInstallmentQueryDto } from './dto/get-installment-query.dto';
 
 @ApiTags('Installments')
 @ApiSecurity('x-tenant-key')
@@ -39,7 +39,13 @@ export class InstallmentsController {
 
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(
+    OrgUserRole.ADMIN,
+    OrgUserRole.MANAGER,
+    OrgUserRole.OWNER,
+    OrgUserRole.ACCOUNTANT,
+    OrgUserRole.SELLER,
+  )
   @ApiOperation({ summary: 'Создать рассрочку по продаже' })
   create(
     @CurrentTenant() tenant: Tenant,
@@ -66,9 +72,22 @@ export class InstallmentsController {
     return this.installmentsService.addPayment(tenant, user, dto);
   }
 
-  @Get()
-  @UseGuards(ApiKeyGuard, JwtAuthGuard)
-  @ApiOperation({ summary: 'Список всех рассрочек с фильтрацией' })
+  @Get('admin/all')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(
+    OrgUserRole.ADMIN,
+    OrgUserRole.OWNER,
+    OrgUserRole.MANAGER,
+    OrgUserRole.ACCOUNTANT,
+  )
+  @ApiOperation({
+    summary: 'Список всех рассрочек организации с фильтрацией и пагинацией',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Поиск по номеру продажи / имени клиента',
+  })
   @ApiQuery({ name: 'customerId', required: false })
   @ApiQuery({ name: 'status', required: false, enum: InstallmentStatus })
   @ApiQuery({
@@ -76,12 +95,16 @@ export class InstallmentsController {
     required: false,
     description: 'true — только просроченные',
   })
-  findAll(
+  @ApiQuery({ name: 'sortField', required: false, example: 'dueDate' })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  async getAllAdmin(
     @CurrentTenant() tenant: Tenant,
     @CurrentTenantUser() user: JwtAuthenticatedUser,
-    @Query() filter: InstallmentFilterDto,
+    @Query() query: GetInstallmentQueryDto,
   ) {
-    return this.installmentsService.findAll(tenant, user, filter);
+    return this.installmentsService.getAllAdmin(tenant, user.orgId, query);
   }
 
   @Get(':id')
