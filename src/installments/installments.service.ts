@@ -172,11 +172,13 @@ export class InstallmentsService {
         amountDecimal,
       );
 
-      const totalPaidAfterPayment = newPaid;
-      const fullyPaidMonths = totalPaidAfterPayment
+      const paidWithoutInitial = newPaid.sub(installment.initialPayment);
+
+      const fullyPaidMonths = paidWithoutInitial
         .div(installment.monthlyPayment)
         .floor()
         .toNumber();
+
 
       // Новый monthsLeft = сколько месяцев осталось
       const newMonthsLeft = Math.max(
