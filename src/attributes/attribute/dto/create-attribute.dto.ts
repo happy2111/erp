@@ -1,8 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateAttributeDto {
-  @ApiProperty({ example: 'color', description: 'Уникальный ключ характеристики' })
+  @ApiProperty({
+    example: 'color',
+    description: 'Уникальный ключ характеристики',
+  })
   @IsString()
   key: string;
 
@@ -10,4 +13,8 @@ export class CreateAttributeDto {
   @IsString()
   @MinLength(2)
   name: string;
+  
+  @IsOptional()
+  @IsBoolean()
+  isRequired?: boolean;
 }

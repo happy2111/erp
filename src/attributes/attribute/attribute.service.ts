@@ -123,12 +123,13 @@ export class AttributeService {
       throw new NotFoundException('Характеристика не найдена');
     }
 
-    if (dto.key || dto.name) {
+    if (dto.key || dto.name || dto.isRequired) {
       const conflict = await client.attribute.findFirst({
         where: {
           OR: [
             dto.key ? { key: dto.key } : {},
             dto.name ? { name: dto.name } : {},
+            dto.isRequired !== null ? { isRequired: dto.isRequired } : {},
           ],
           id: { not: id },
         },

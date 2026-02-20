@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaTenantService } from '../prisma_tenant/prisma_tenant.service';
@@ -15,6 +16,8 @@ import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
 export class OrganizationService {
+  private readonly logger = new Logger(OrganizationService.name);
+
   constructor(
     private readonly prismaTenant: PrismaTenantService,
     private readonly auditHelper: AuditHelper,
@@ -57,15 +60,19 @@ export class OrganizationService {
           position: 'Владелец',
         },
       });
-
-      const settrings = await tx.settings.create({
+      this.logger.debug('Creating Organization Settings...');
+      await tx.settings.create({
         data: {
           organizationId: organization.id,
         },
       });
-
-
-
+      this.logger.debug('Creating Organization Installment Settings...');
+      await tx.installmentSetting.create({
+        data: {
+          organizationId: organization.id,
+          isActive: false,
+        },
+      });
       // 3. Логируем создание организации
       await this.auditHelper.log(tx, organization.id, {
         userId: user.userId,
