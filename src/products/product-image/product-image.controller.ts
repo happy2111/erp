@@ -31,7 +31,13 @@ export class ProductImagesController {
    */
   @Post(':productId/presign')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
-  @Roles(OrgUserRole.ADMIN, OrgUserRole.MANAGER, OrgUserRole.OWNER)
+  @Roles(
+    OrgUserRole.ADMIN,
+    OrgUserRole.MANAGER,
+    OrgUserRole.OWNER,
+    OrgUserRole.ACCOUNTANT,
+    OrgUserRole.SELLER,
+  )
   @ApiOperation({ summary: 'Получить presigned URL для загрузки изображения' })
   @ApiParam({ name: 'productId', description: 'ID товара' })
   getPresignUrl(

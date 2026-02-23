@@ -20,7 +20,6 @@ export class TenantRolesGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest();
 
-
     if (!roles.includes(user.role)) {
       throw new ForbiddenException(
         'You do not have permission for this action',

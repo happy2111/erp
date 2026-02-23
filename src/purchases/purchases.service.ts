@@ -47,7 +47,7 @@ export class PurchasesService {
     const currency = await client.currency.findUnique({
       where: { id: dto.currencyId },
     });
-    if (!currency) throw new BadRequestException('Валюта не найдена');
+    if (!currency) throw new BadRequestException('Valyuta topilmadi');
 
     let kassa: Kassa | null = null;
 
@@ -62,7 +62,7 @@ export class PurchasesService {
 
       if (!kassa) {
         throw new BadRequestException(
-          'Касса не найдена или валюта кассы не совпадает',
+          'Kassa topilmadi yoki kassa valyutasi mos kelmaydi',
         );
       }
     }
@@ -76,7 +76,9 @@ export class PurchasesService {
       },
     });
     if (!supplier)
-      throw new NotFoundException('Поставщик не найден в этой организации');
+      throw new NotFoundException(
+        'Yetkazib beruvchi ushbu tashkilotda topilmadi',
+      );
 
     // 3. Проверяем ответственного (если указан)
     if (user.orgUserId) {
@@ -85,7 +87,7 @@ export class PurchasesService {
       });
       if (!responsible)
         throw new BadRequestException(
-          'Ответственный не найден в этой организации',
+          'Mas’ul shaxs ushbu tashkilotda topilmadi',
         );
     }
 
@@ -110,40 +112,43 @@ export class PurchasesService {
 
         if (!variant)
           throw new NotFoundException(
-            `Вариант товара ${item.productVariantId} не найден или принадлежит другой организации`,
+            `Tovar varianti ${item.productVariantId} topilmadi yoki boshqa tashkilotga tegishli`,
           );
 
         if (item.quantity <= 0) {
-          throw new BadRequestException('Количество должно быть больше 0');
+          throw new BadRequestException('Miqdor 0 dan katta bo‘lishi kerak');
         }
 
         if (item.price < 0) {
-          throw new BadRequestException('Цена не может быть отрицательной');
+          throw new BadRequestException('Narx manfiy bo‘lishi mumkin emas');
         }
 
         if (item.discount && item.discount < 0) {
-          throw new BadRequestException('Скидка не может быть отрицательной');
+          throw new BadRequestException('Chegirma manfiy bo‘lishi mumkin emas');
         }
 
         if (item.discount && item.discount > item.price) {
-          throw new BadRequestException('Скидка не может быть больше цены');
+          throw new BadRequestException(
+            'Chegirma narxdan yuqori bo‘lishi mumkin emas',
+          );
         }
 
         if (item.batchNumber && item.quantity <= 0) {
           throw new BadRequestException(
-            'Количество партии должно быть больше 0',
+            'Partiya miqdori 0 dan katta bo‘lishi kerak',
           );
         }
 
         if (item.expiryDate && item.expiryDate <= new Date()) {
           throw new BadRequestException(
-            'Срок годности партии должен быть в будущем',
+            'Partiya yaroqlilik muddati kelajakda bo‘lishi kerak',
           );
         }
 
-        const total = new Prisma.Decimal(item.quantity)
-          .mul(item.price)
-          .sub(new Prisma.Decimal(item.discount || 0).mul(item.quantity));
+        const priceDec = new Prisma.Decimal(item.price);
+        const discountDec = new Prisma.Decimal(item.discount || 0);
+        const quantityDec = new Prisma.Decimal(item.quantity);
+        const total = priceDec.sub(discountDec).mul(quantityDec);
 
         return {
           productVariantId: item.productVariantId,
@@ -181,13 +186,13 @@ export class PurchasesService {
 
     if (isPaidNow && !dto.kassaId) {
       throw new BadRequestException(
-        'Для оплаченной закупки необходимо указать кассу',
+        'To‘langan xarid uchun kassa ko‘rsatilishi shart',
       );
     }
 
     if (paidAmount.gt(totalAmount)) {
       throw new BadRequestException(
-        'Первоначальный платёж не может превышать сумму закупки',
+        `Boshlang‘ich to‘lov (${paidAmount.toString()}) xarid summasidan (${totalAmount.toString()}) oshib ketishi mumkin emas`,
       );
     }
 
@@ -238,7 +243,7 @@ export class PurchasesService {
             amount: paidAmount,
             type: PaymentType.EXPENSE,
             purchaseId: purchase.id,
-            description: `Оплата закупки ${invoiceNumber}`,
+            description: `Xarid bo‘yicha to‘lov ${invoiceNumber}`,
           },
         });
 
@@ -255,33 +260,32 @@ export class PurchasesService {
           amount: Number(paidAmount),
           type: PaymentType.EXPENSE,
           currencyId: dto.currencyId,
-          description: `Оплата закупки ${invoiceNumber}`,
+          description: `Xarid bo‘yicha to‘lov ${invoiceNumber}`,
           createdById: user.orgUserId,
         });
-        if (isPaidNow) {
-          for (let i = 0; i < purchase.items.length; i++) {
-            const item = purchase.items[i];
-            const source = purchaseItemsData[i];
 
-            if (source._batch) {
-              await tx.productBatch.create({
-                data: {
-                  productVariantId: item.productVariantId,
-                  batchNumber: source._batch.batchNumber,
-                  expiryDate: source._batch.expiryDate,
-                  quantity: item.quantity,
-                  purchaseItemId: item.id,
-                },
-              });
-            }
+        for (let i = 0; i < purchase.items.length; i++) {
+          const item = purchase.items[i];
+          const source = purchaseItemsData[i];
 
-            await this.stocksService.incrementStock(
-              tx,
-              organizationId,
-              item.productVariantId,
-              item.quantity,
-            );
+          if (source._batch) {
+            await tx.productBatch.create({
+              data: {
+                productVariantId: item.productVariantId,
+                batchNumber: source._batch.batchNumber,
+                expiryDate: source._batch.expiryDate,
+                quantity: item.quantity,
+                purchaseItemId: item.id,
+              },
+            });
           }
+
+          await this.stocksService.incrementStock(
+            tx,
+            organizationId,
+            item.productVariantId,
+            item.quantity,
+          );
         }
       }
 
@@ -296,7 +300,7 @@ export class PurchasesService {
           totalAmount: Number(totalAmount),
           status: purchase.status,
         },
-        note: `Создана новая закупка ${invoiceNumber}`,
+        note: `Yangi xarid yaratildi ${invoiceNumber}`,
       });
 
       return {
@@ -602,7 +606,7 @@ export class PurchasesService {
         items: {
           include: {
             product_variant: {
-              select: {id: true, title: true, sku: true, barcode: true },
+              select: { id: true, title: true, sku: true, barcode: true },
             },
           },
         },
