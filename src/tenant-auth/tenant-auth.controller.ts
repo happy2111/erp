@@ -65,7 +65,19 @@ export class TenantAuthController {
     @Body() dto: TenantLoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const hostname = req.hostname;
+    const origin = req.get('origin') || req.get('referer');
+
+    let hostname: string;
+
+    if (origin) {
+      try {
+        hostname = new URL(origin).hostname;
+      } catch (e) {
+        hostname = req.hostname;
+      }
+    } else {
+      hostname = req.hostname;
+    }
     const tenant = await this.prisma.tenant.findFirst({ where: { hostname } });
 
     if (!tenant)
