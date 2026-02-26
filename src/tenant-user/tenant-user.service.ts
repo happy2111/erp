@@ -42,7 +42,7 @@ export class TenantUserService {
     } = query;
 
     const where: Prisma.UserWhereInput = {
-      org_links: { some: { organizationId: currentUser.orgId } },
+      // org_links: { some: { organizationId: currentUser.orgId } },
     };
 
     if (search) {
