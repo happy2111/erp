@@ -172,7 +172,6 @@ export class OrganizationService {
 
     return organization;
   }
-
   async findAll(
     tenant: Tenant,
     user: JwtAuthenticatedUser,
@@ -201,8 +200,8 @@ export class OrganizationService {
       client.organization.findMany({
         where,
         orderBy: { [sortField]: order },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (Number(page) - 1) * Number(limit), // Ensure numeric values
+        take: Number(limit),
         include: {
           org_users: {
             select: { userId: true, role: true },
@@ -214,7 +213,16 @@ export class OrganizationService {
       client.organization.count({ where }),
     ]);
 
-    return { items, total };
+    // Calculate total pages
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages,
+    };
   }
 
   async findById(tenant: Tenant, user: JwtAuthenticatedUser, id: string) {

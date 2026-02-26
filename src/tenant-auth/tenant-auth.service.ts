@@ -230,11 +230,9 @@ export class TenantAuthService {
   private setAccessCookie(res: Response, value: string, expires: Date) {
     res.cookie('accessToken', value, {
       httpOnly: true,
-      secure: this.configService.get<boolean>('COOKIE_SECURE'),
-      sameSite: this.configService.get<'lax' | 'none'>('COOKIE_SAMESITE'),
-      domain:
-        this.configService.get<string | undefined>('COOKIE_DOMAIN') ||
-        undefined,
+      secure: this.configService.get('COOKIE_SECURE') === 'true',
+      sameSite: this.configService.get('COOKIE_SAMESITE') || 'lax',
+      domain: this.configService.get('COOKIE_DOMAIN') || undefined,
       path: '/',
       expires,
     });

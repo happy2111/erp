@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -15,7 +14,7 @@ import {
   GetTenantUsersQueryDto,
   TenantUserSortField,
 } from './dto/get-tenant-users-query.dto';
-import { AuditHelper } from '../audit-logs/audit.helper'; // если у вас есть
+import { AuditHelper } from '../audit-logs/audit.helper';
 import { JwtAuthenticatedUser } from '../tenant-auth/interfaces/jwt.interface';
 
 @Injectable()
