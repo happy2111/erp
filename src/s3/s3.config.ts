@@ -1,4 +1,3 @@
-// s3.config.ts
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('s3', () => ({
