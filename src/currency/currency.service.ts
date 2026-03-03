@@ -15,6 +15,18 @@ export class CurrencyService {
     });
   }
 
+  async createMany(tenant: Tenant, createCurrencyDtos: CreateCurrencyDto[]) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    return client.$transaction(
+      createCurrencyDtos.map((dto) =>
+        client.currency.create({
+          data: dto,
+        }),
+      ),
+    );
+  }
+
   async findAll(tenant: Tenant) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
     return client.currency.findMany({

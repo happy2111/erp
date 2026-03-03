@@ -71,6 +71,17 @@ export class CategoriesController {
     return { data: category };
   }
 
+  @Post('create-many')
+  @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
+  @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
+  @ApiOperation({ summary: 'Создать новую категорию' })
+  async createMany(
+    @CurrentTenant() tenant: Tenant,
+    @Body() dto: CreateCategoryDto[],
+  ) {
+    return await this.service.createMany(tenant, dto);
+  }
+
   @Patch('update/:id')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)

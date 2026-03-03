@@ -91,9 +91,27 @@ export class CategoriesService {
     return client.category.create({
       data: {
         name: dto.name,
-        // organizationId: user.orgId,  ← добавить при необходимости
       },
     });
+  }
+
+  async createMany(tenant: Tenant, dto: CreateCategoryDto[]) {
+    const client = this.prismaTenant.getTenantPrismaClient(tenant);
+
+    try {
+      return await client.category.createMany({
+        data: dto,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Одна из категорий уже существует');
+      }
+
+      throw error;
+    }
   }
 
   async update(
