@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -107,7 +106,6 @@ export class ProductVariantAttributeService {
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Проверка существования варианта и значения атрибута
     const [variantExists, valueExists] = await Promise.all([
       client.productVariant.findUnique({ where: { id: dto.productVariantId } }),
       client.attributeValue.findUnique({ where: { id: dto.attributeValueId } }),
