@@ -93,12 +93,40 @@ export class OrganizationService {
 
   async createWithoutUser(tenant: Tenant, dto: CreateOrganizationDto) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
-    const organization = await client.organization.create({
-      data: {
-        ...dto,
-      },
+
+    return client.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          ...dto,
+        },
+      });
+      this.logger.debug('Creating Organization Settings...');
+      await tx.settings.create({
+        data: {
+          organizationId: organization.id,
+        },
+      });
+      this.logger.debug('Creating Organization Installment Settings...');
+      await tx.installmentSetting.create({
+        data: {
+          organizationId: organization.id,
+          isActive: false,
+        },
+      });
+      await this.auditHelper.log(tx, organization.id, {
+        action: 'CREATE',
+        entity: 'Organization',
+        entityId: organization.id,
+        newValue: {
+          name: organization.name,
+          email: organization.email,
+          phone: organization.phone,
+        },
+        note: `Создана новая организация "${organization.name}"`,
+      });
+
+      return organization;
     });
-    return organization;
   }
 
   async findAllForUser(tenant: Tenant, user: JwtAuthenticatedUser) {
