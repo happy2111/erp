@@ -53,22 +53,69 @@ export class ProductVariantsService {
       order = 'desc',
       page = 1,
       limit = 20,
+      attributes: attrFilter,
     } = query;
 
-    const where: Prisma.ProductVariantWhereInput = {
-      product: {
-        organizationId: orgId, // строго своя организация
-      },
-    };
+    // Инициализируем AND как массив сразу, чтобы избежать проблем с типами
+    const andConditions: Prisma.ProductVariantWhereInput[] = [
+      { product: { organizationId: orgId } },
+    ];
 
-    if (productId) where.productId = productId;
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { sku: { contains: search, mode: 'insensitive' } },
-        { barcode: { contains: search, mode: 'insensitive' } },
-      ];
+    if (productId) {
+      andConditions.push({ productId });
     }
+
+    if (search) {
+      andConditions.push({
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { sku: { contains: search, mode: 'insensitive' } },
+          { barcode: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (attrFilter && typeof attrFilter === 'object') {
+      const attrEntries = Object.entries(attrFilter);
+
+      if (attrEntries.length > 0) {
+        const attrConditions = attrEntries
+          .map(([key, values]): Prisma.ProductVariantWhereInput | null => {
+            if (!values) return null;
+
+            const valueIds =
+              typeof values === 'object' && values !== null
+                ? (Object.values(values) as string[])
+                : Array.isArray(values)
+                  ? values
+                  : [values as string];
+
+            if (valueIds.length === 0) return null;
+
+            // Используем 'as', чтобы TS не пытался сравнивать вложенные свойства на лету
+            return {
+              product_variant_attribute: {
+                some: {
+                  value: {
+                    id: { in: valueIds },
+                    attribute: { key: key },
+                  },
+                },
+              },
+            } as Prisma.ProductVariantWhereInput;
+          })
+          .filter((c): c is Prisma.ProductVariantWhereInput => c !== null);
+
+        if (attrConditions.length > 0) {
+          // Логика "хотя бы один из выбранных атрибутов"
+          andConditions.push({ OR: attrConditions });
+        }
+      }
+    }
+
+    const where: Prisma.ProductVariantWhereInput = {
+      AND: andConditions,
+    };
 
     const [rawVariants, total] = await Promise.all([
       client.productVariant.findMany({
@@ -89,9 +136,7 @@ export class ProductVariantsService {
           product: { select: { id: true, name: true, code: true } },
           currency: true,
           images: true,
-          stocks: {
-            select: { quantity: true },
-          },
+          stocks: { select: { quantity: true } },
           product_instance: true,
         },
       }),
@@ -100,7 +145,6 @@ export class ProductVariantsService {
 
     const transformed = await Promise.all(
       rawVariants.map(async (v) => {
-        // 1. Shu variantga tegishli atributlarni tozalash
         const attributes = v.product_variant_attribute.map((pva) => ({
           key: pva.value.attribute.key,
           name: pva.value.attribute.name,
@@ -116,6 +160,7 @@ export class ProductVariantsService {
           })),
         );
 
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { product_variant_attribute, ...rest } = v;
 
         return {
@@ -172,6 +217,7 @@ export class ProductVariantsService {
       }),
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { product_variant_attribute, ...rest } = variant;
 
     return {

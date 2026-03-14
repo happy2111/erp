@@ -5,6 +5,7 @@ import {
   IsString,
   IsUUID,
   Min,
+  IsObject
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -48,4 +49,17 @@ export class GetProductVariantQueryDto {
   @IsInt()
   @Min(1)
   limit?: number = 20;
+
+  @ApiPropertyOptional({
+    example: { rang: ['uuid-4', 'uuid-2'], memory: ['uuid-3'] },
+    description:
+      'Объект, где ключ - это key атрибута, а значение - массив ID значений (AttributeValue)',
+  })
+  @IsOptional()
+  @ApiPropertyOptional({
+    example: { color: ['uuid-1'], memory: ['uuid-2'] },
+  })
+
+  @IsOptional()
+  attributes?: any;
 }

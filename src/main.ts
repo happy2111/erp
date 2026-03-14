@@ -8,10 +8,19 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import * as qs from 'qs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  const server = app.getHttpAdapter().getInstance();
+  server.set('query parser', (str: string) =>
+    qs.parse(str, {
+      allowDots: true,
+      allowSparse: true,
+    }),
+  );
+  
   const allowedOrigins =
     process.env.FRONTEND_URLS?.split(',').map((o) => o.trim()) ?? [];
   app.enableCors({
@@ -35,7 +44,7 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false,
       transform: true,
     }),
   );

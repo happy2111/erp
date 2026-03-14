@@ -47,6 +47,7 @@ export class ProductVariantsController {
   @ApiOperation({ summary: 'Список всех вариантов товаров (админ-панель)' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'productId', required: false })
+  @ApiQuery({ name: 'attributes', required: false })
   @ApiQuery({ name: 'sortField', required: false, example: 'title' })
   @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'page', required: false, example: 1 })
@@ -56,6 +57,7 @@ export class ProductVariantsController {
     @CurrentTenantUser() user: JwtAuthenticatedUser,
     @Query() query: GetProductVariantQueryDto,
   ) {
+    console.log('RAW QUERY:', query);
     return this.service.getAllAdmin(tenant, user.orgId, query);
   }
 
