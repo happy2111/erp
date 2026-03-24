@@ -13,6 +13,11 @@ export class GetProductQueryDto {
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional({ example: 'uuid-category-apple' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
   @ApiPropertyOptional({ example: 'name' })
   @IsOptional()
   @IsString()

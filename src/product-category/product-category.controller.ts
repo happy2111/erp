@@ -65,7 +65,6 @@ export class ProductCategoryController {
     return this.service.getAllAdmin(tenant, user, query);
   }
 
-  // ─── Создание связи ────────────────────────────────────────────────────────
   @Post('create')
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)
   @Roles(OrgUserRole.ADMIN, OrgUserRole.OWNER, OrgUserRole.MANAGER)
@@ -79,7 +78,6 @@ export class ProductCategoryController {
     return { data: link };
   }
 
-  // ─── Удаление связи (по составному ключу) ──────────────────────────────────
   @Delete('remove')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(ApiKeyGuard, JwtAuthGuard, TenantRolesGuard)

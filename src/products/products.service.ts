@@ -30,6 +30,7 @@ export class ProductsService {
 
     const {
       search,
+      categoryId,
       sortField = 'createdAt',
       order = 'desc',
       page = 1,
@@ -45,6 +46,14 @@ export class ProductsService {
         { name: { contains: search, mode: 'insensitive' } },
         { code: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    if (categoryId) {
+      where.categories = {
+        some: {
+          categoryId,
+        },
+      };
     }
 
     const [data, total] = await Promise.all([
