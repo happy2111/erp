@@ -87,7 +87,6 @@ export class ProductCategoryService {
   ) {
     const client = this.prismaTenant.getTenantPrismaClient(tenant);
 
-    // Проверка существования товара и категории (желательно)
     const [productExists, categoryExists] = await Promise.all([
       client.product.findUnique({ where: { id: dto.productId } }),
       client.category.findUnique({ where: { id: dto.categoryId } }),
@@ -117,6 +116,10 @@ export class ProductCategoryService {
       data: {
         productId: dto.productId,
         categoryId: dto.categoryId,
+      },
+      include: {
+        product: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true } },
       },
     });
   }
